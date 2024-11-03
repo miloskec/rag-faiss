@@ -90,4 +90,4 @@ Feel free to open issues or submit pull requests for any improvements or bug fix
 This project is licensed under [MIT License](https://choosealicense.com/licenses/mit/).
 
 ## Contact
-For further assistance, please contact [Milos Kecman].
+For further assistance, please contact [Milos Kecman](https://miloskecman.online).
