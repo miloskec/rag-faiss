@@ -87,7 +87,7 @@ ProjectPy/
 Feel free to open issues or submit pull requests for any improvements or bug fixes.
 
 ## License
-This project is licensed under [MIT License](LICENSE).
+This project is licensed under [MIT License](https://choosealicense.com/licenses/mit/).
 
 ## Contact
-For further assistance, please contact [Your Name/Project Maintainer].
+For further assistance, please contact [Milos Kecman].
