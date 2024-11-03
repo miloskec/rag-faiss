@@ -1,0 +1,28 @@
+services:
+  mistral:
+    image: huggingface/transformers-pytorch-gpu
+    container_name: mistral_rag_chatbot
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    ports:
+      - "5000:5000" # Map container's port 5000 to localhost's port 5000
+    volumes:
+      - ./workspace:/workspace # Mount local folder to /workspace for data persistence and access to the script
+      - ./mistral-7b-instruct:/models/saved_mistral_model
+      - ./llama-7b-hf:/models/saved_llama_model
+    environment:
+      - MODEL=llama-7b-hf # mistral-7b-instruct or llama-7b-hf
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HUGGING_FACE_HUB_TOKEN=${HUGGINGFACE_TOKEN}
+    command: >
+      bash -c " apt-get update && 
+      pip3 install langchain torch accelerate flask langchain-community langchain-huggingface pymupdf llama-index llama-index-embeddings-huggingface peft auto-gptq optimum bitsandbytes sentence-transformers pymilvus pdfplumber PyPDF2 faiss-cpu numpy python-docx odfpy && 
+      python3 /workspace/app.py && tail -f /dev/null"
+    stdin_open: true
+    tty: true

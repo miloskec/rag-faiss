@@ -1,0 +1,192 @@
+{
+	"info": {
+		"_postman_id": "153dabd7-8ed9-4ad0-9402-d70df8c5f909",
+		"name": "Mistral RAG Chatbot",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "9220824"
+	},
+	"item": [
+		{
+			"name": "SEARCH llama-7b-hf",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"model\": \"llama-7b-hf\",\r\n    \"context_type\": \"pdf\",\r\n    \"query\": \"What is the latest PCI-DSS standard version? Please check this question out of the context provided and compare with context provided.\",\r\n    \"template\" : \"<s>[INST]Use the following context: \\\"{context}\\\" to answer the question: \\\"{query}\\\" [/INST]</s>\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5000/search",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"search"
+					]
+				},
+				"description": "# Search API\n\nThis endpoint allows users to perform a search using a specific model and context type.\n\n## Request Body\n\n- model (string): The model to be used for the search.\n    \n- context_type (string): The type of context for the search.\n    \n- query (string): The search query.\n    \n- template (string): The template to be used for the search.\n    \n\n#### Response\n\nThe response will be in JSON format with the following structure:\n\n``` json\n{\n    \"query\": \"\",\n    \"results\": {\n        \"model_response\": \"\",\n        \"search_results\": [\n            {\n                \"distance\": 0,\n                \"index\": 0,\n                \"text\": \"\"\n            }\n        ]\n    }\n}\n\n ```\n\n- query (string): The search query.\n    \n- results (object): An object containing the model response and search results.\n    \n    - model_response (string): The response from the model.\n        \n    - search_results (array): An array of search results.\n        \n        - distance (number): The distance of the search result.\n            \n        - index (number): The index of the search result.\n            \n        - text (string): The text of the search result.\n            \n- `model` (string): The model to be used for the search.\n    \n- `context_type` (string): The type of context for the search.\n    \n- `query` (string): The search query.\n    \n- `template` (string): The template to be used for the search."
+			},
+			"response": []
+		},
+		{
+			"name": "SEARCH llama-7b-hf DOC",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"model\": \"llama-7b-hf\",\r\n    \"context_type\": \"doc\",\r\n    \"query\": \"What is the latest PCI-DSS standard version? Please check this question out of the context provided and compare with context provided.\",\r\n    \"template\" : \"<s>[INST]Use the following context: \\\"{context}\\\" to answer the question: \\\"{query}\\\" [/INST]</s>\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5000/search",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"search"
+					]
+				},
+				"description": "### Search API\n\nThis endpoint allows users to perform a search using a specific model and context type.\n\n#### Request Body\n\n- model (string): The model to be used for the search.\n    \n- context_type (string): The type of context for the search.\n    \n- query (string): The search query.\n    \n- template (string): The template to be used for the search.\n    \n\n#### Response\n\nThe response will be in JSON format with the following structure:\n\n``` json\n{\n    \"query\": \"\",\n    \"results\": {\n        \"model_response\": \"\",\n        \"search_results\": [\n            {\n                \"distance\": 0,\n                \"index\": 0,\n                \"text\": \"\"\n            }\n        ]\n    }\n}\n\n ```\n\n- query (string): The search query.\n    \n- results (object): An object containing the model response and search results.\n    \n    - model_response (string): The response from the model.\n        \n    - search_results (array): An array of search results.\n        \n        - distance (number): The distance of the search result.\n            \n        - index (number): The index of the search result.\n            \n        - text (string): The text of the search result.\n            \n- `model` (string): The model to be used for the search.\n    \n- `context_type` (string): The type of context for the search.\n    \n- `query` (string): The search query.\n    \n- `template` (string): The template to be used for the search."
+			},
+			"response": []
+		},
+		{
+			"name": "SEARCH Mistral",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"model\": \"mistral-7b-instruct\",\r\n    \"context_type\": \"pdf\",\r\n    \"query\": \"What is the latest PCI-DSS standard version? Please check this question out of the context provided and compare with context provided.\",\r\n    \"template\" : \"<s>[INST]Use the following context: \\\"{context}\\\" to answer the question: \\\"{query}\\\" [/INST]</s>\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5000/search",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"search"
+					]
+				},
+				"description": "### Search Endpoint\n\nThis endpoint allows users to search for specific content using a given model, context type, query, and template.\n\n#### Request Body\n\n- model (string): The model to be used for the search.\n    \n- context_type (string): The type of context for the search (e.g., pdf, text).\n    \n- query (string): The search query.\n    \n- template (string): The template to be used for the search.\n    \n\n#### Response\n\nThe response will be in JSON format with the following structure:\n\n``` json\n{\n    \"query\": \"\",\n    \"results\": {\n        \"model_response\": \"\",\n        \"search_results\": [\n            {\n                \"distance\": 0,\n                \"index\": 0,\n                \"text\": \"\"\n            }\n        ]\n    }\n}\n\n ```\n\n- query (string): The search query.\n    \n- results (object): An object containing the model response and search results.\n    \n    - model_response (string): The response from the model.\n        \n    - search_results (array): An array of search results.\n        \n        - distance (number): The distance of the search result.\n            \n        - index (number): The index of the search result.\n            \n        - text (string): The text of the search result.\n            \n\n- `model` (string): The model to be used for the search.\n    \n- `context_type` (string): The type of context for the search.\n    \n- `query` (string): The search query.\n    \n- `template` (string): The template to be used for the search.\n    \n\nThe response will include the search results based on the provided parameters."
+			},
+			"response": []
+		},
+		{
+			"name": "SEARCH Mistral DOC",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"model\": \"mistral-7b-instruct\",\r\n    \"context_type\": \"doc\",\r\n    \"query\": \"What is the latest PCI-DSS standard version? Please check this question out of the context provided and compare with context provided.\",\r\n    \"template\" : \"<s>[INST]Use the following context: \\\"{context}\\\" to answer the question: \\\"{query}\\\" [/INST]</s>\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5000/search",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"search"
+					]
+				},
+				"description": "This endpoint allows you to make an HTTP POST request to [http://localhost:5000/search](http://localhost:5000/search) in order to perform a search operation. The request should include a raw request body with the following parameters:\n\n- `model`: Represents the model being used for the search operation.\n    \n- `context_type`: Specifies the type of context for the search.\n    \n- `query`: Contains the search query to be executed.\n    \n- `template`: Represents the template to be applied for the search.\n    \n\nUpon a successful request, the response will contain the search results based on the provided parameters.\n\n#### Response\n\nThe response will be in JSON format with the following structure:\n\n``` json\n{\n    \"query\": \"\",\n    \"results\": {\n        \"model_response\": \"\",\n        \"search_results\": [\n            {\n                \"distance\": 0,\n                \"index\": 0,\n                \"text\": \"\"\n            }\n        ]\n    }\n}\n\n ```\n\n- query (string): The search query.\n    \n- results (object): An object containing the model response and search results.\n    \n    - model_response (string): The response from the model.\n        \n    - search_results (array): An array of search results.\n        \n        - distance (number): The distance of the search result.\n            \n        - index (number): The index of the search result.\n            \n        - text (string): The text of the search result.\n            \n- `model` (string): The model to be used for the search.\n    \n- `context_type` (string): The type of context for the search.\n    \n- `query` (string): The search query.\n    \n- `template` (string): The template to be used for the search."
+			},
+			"response": []
+		},
+		{
+			"name": "UPDATE RAG DOC-DOCX",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/update-index",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"update-index"
+					]
+				},
+				"description": "Update Index\n\nThis endpoint is used to update the index with the specified type of document.\n\n#### Request Parameters\n\n- type (query parameter) - The type of document to be updated in the index.\n    \n\n#### Response\n\nThe response will contain the updated index information based on the specified document type."
+			},
+			"response": []
+		},
+		{
+			"name": "UPDATE RAG PDF",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/update-index?type=pdf",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"update-index"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "pdf"
+						}
+					]
+				},
+				"description": "### Update Index\n\nThis endpoint makes an HTTP GET request to update the index with the specified type.\n\n#### Request Parameters\n\n- `type` (query parameter, required): The type of index to be updated.\n    \n\n#### Response Body\n\nThe response is in JSON format and has the following schema:\n\n``` json\n{\n  \"status\": \"string\"\n}\n\n ```\n\n- `status` (string): Represents the status of the update operation.\n    \n\nThis endpoint is used to update the index with the PDF type of document.\n\n#### Request Parameters\n\n- type (query parameter) - The type of document to be updated in the index.\n    \n\n#### Response\n\nThe response will contain the updated index information based on the specified document type."
+			},
+			"response": []
+		},
+		{
+			"name": "CLEAN MODEL RESOURCES",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:5000/clean-resources",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"clean-resources"
+					]
+				},
+				"description": "### Clean Resources\n\nThis endpoint triggers an HTTP GET request to clean up resources.\n\n#### Request Parameters\n\n- `type` (query parameter, required): Specifies the type of resources to be cleaned up.\n    \n\n#### Response Body\n\nThe response is in JSON format and has the following schema:\n\n``` json\n{\n  \"status\": \"string\"\n}\n\n ```\n\n- `status` (string): Represents the status of the clean-up operation.\n    \n\nThis endpoint is used to clean up resources related to the specified type.\n\n#### Request Body\n\nThis request does not require a request body.\n\n#### Response\n\nUpon successful execution, the response will contain the status of the clean-up operation."
+			},
+			"response": []
+		}
+	]
+}
