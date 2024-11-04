@@ -47,7 +47,6 @@ ProjectPy/
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/miloskec/rag-faiss
-   cd ProjectPy
    ```
 
 2. **Set up the environment**:
