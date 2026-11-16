@@ -10,15 +10,18 @@ from odf.text import P
 import shared_state  # Import the shared index and mappings from shared_state
 import logging
 
+FAISS_DIMENSION = 1024
 # Initialize the sentence transformer model (to convert text to embeddings)
-model = SentenceTransformer('all-distilroberta-v1')
+model = SentenceTransformer('intfloat/multilingual-e5-large')
+# English
+#model = SentenceTransformer('all-distilroberta-v1')
 
 # FAISS index file and text mapping paths
 FAISS_INDEX_PATH = "./workspace/data/doc/index.faiss"
 TEXT_MAPPING_PATH = "./workspace/data/doc/text_mapping.pkl"
 
 # Initialize FAISS index
-index_doc = faiss.IndexFlatL2(768)
+index_doc = faiss.IndexFlatL2(FAISS_DIMENSION)
 indexed_text_mapping_doc = []
 
 # Save FAISS index to disk
@@ -31,7 +34,7 @@ def save_mappings():
         pickle.dump(shared_state.indexed_text_mapping_doc, f)
 
 # Function to load FAISS index from disk
-def load_faiss_index(embedding_size=768):
+def load_faiss_index(embedding_size=FAISS_DIMENSION):
     if os.path.exists(FAISS_INDEX_PATH):
         return faiss.read_index(FAISS_INDEX_PATH)
     else:
@@ -137,7 +140,7 @@ def clear_index():
 # Main function to initialize FAISS and load existing data
 def initialize():
     # Initialize FAISS index and load data into shared state
-    shared_state.index_doc = load_faiss_index(embedding_size=768)
+    shared_state.index_doc = load_faiss_index(embedding_size=FAISS_DIMENSION)
     load_mappings()
 
 # Function to save index and mappings after updates

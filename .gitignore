@@ -1,2 +1,3 @@
 .env
 workspace/__pycache__/
+workspace/logs/

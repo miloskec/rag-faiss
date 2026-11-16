@@ -21,8 +21,8 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - HUGGING_FACE_HUB_TOKEN=${HUGGINGFACE_TOKEN}
     command: >
-      bash -c " apt-get update && 
-      pip3 install langchain torch accelerate flask langchain-community langchain-huggingface pymupdf llama-index llama-index-embeddings-huggingface peft auto-gptq optimum bitsandbytes sentence-transformers pymilvus pdfplumber PyPDF2 faiss-cpu numpy python-docx odfpy && 
+      bash -c " apt-get update &&
+      pip3 install langchain torch accelerate flask langchain-community langchain-huggingface pymupdf llama-index llama-index-embeddings-huggingface peft auto-gptq optimum bitsandbytes sentence-transformers pymilvus pdfplumber PyPDF2 faiss-cpu numpy python-docx odfpy dotenv &&
       python3 /workspace/app.py && tail -f /dev/null"
     stdin_open: true
     tty: true

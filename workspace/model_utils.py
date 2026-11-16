@@ -2,6 +2,8 @@ import os
 import torch
 from llama_module import LlamaModelHandler
 from mistral_module import MistralModelHandler
+from qwen_module import QwenModelHandler
+from sambalingo_module import SambalingoModelHandler
 import logging
 
 # Global variable to keep track of the currently loaded model and its name
@@ -45,6 +47,10 @@ def get_model_handler(selected_model=None):
             handler = LlamaModelHandler()
         elif selected_model == 'mistral-7b-instruct':
             handler = MistralModelHandler()
+        elif selected_model == 'qwen2.5-7B':
+            handler = QwenModelHandler()
+        elif selected_model == 'sambalingo':
+            handler = SambalingoModelHandler()
         else:
             raise ValueError(f"Unknown model selection: {selected_model}")
 

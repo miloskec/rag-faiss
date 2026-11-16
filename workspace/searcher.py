@@ -9,10 +9,14 @@ from model_utils import query_model  # Function to query the selected model
 
 # Check if a GPU is available
 device = 0 if torch.cuda.is_available() else -1
-# Initialize the reranking pipeline (using a pre-trained cross-encoder model)
-reranker = pipeline("text-classification", model="cross-encoder/ms-marco-MiniLM-L-6-v2", device=device)
-tokenizer = AutoTokenizer.from_pretrained("cross-encoder/ms-marco-MiniLM-L-6-v2")  # Initialize tokenizer
 
+# Initialize the reranking pipeline (using a pre-trained cross-encoder model)
+# ENGLISH
+# reranker = pipeline("text-classification", model="cross-encoder/ms-marco-MiniLM-L-6-v2", device=device)
+# tokenizer = AutoTokenizer.from_pretrained("cross-encoder/ms-marco-MiniLM-L-6-v2")  # Initialize tokenizer
+
+reranker = pipeline("text-classification", model="intfloat/multilingual-e5-large", device=device)
+tokenizer = AutoTokenizer.from_pretrained("intfloat/multilingual-e5-large")
 # Maximum sequence length supported by the model cross-encoder/ms-marco-MiniLM-L-6-v2
 MAX_LENGTH = 512
 
@@ -29,7 +33,10 @@ def truncate_text(query, context, max_length=512):
 
     return context
 # Initialize the sentence transformer model (to convert text to embeddings)
-model = SentenceTransformer('all-distilroberta-v1')
+# ENGLISH
+# model = SentenceTransformer('all-distilroberta-v1')
+# SRB
+model = SentenceTransformer('intfloat/multilingual-e5-large')
 
 def unload_model():
     return unload_current_model()
