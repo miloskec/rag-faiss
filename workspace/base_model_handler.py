@@ -2,31 +2,52 @@ import os
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import logging
+from prompting import build_chat_messages, generate_prompt
+from rag_config import MAX_NEW_TOKENS, MAX_PROMPT_TOKENS, env_flag
 
 class BaseModelHandler:
-    def __init__(self, model_name, save_dir):
+    def __init__(self, model_name, save_dir, prompt_style="plain"):
         self.model_name = model_name
         self.save_dir = save_dir
+        self.prompt_style = prompt_style
         self.model = None
         self.tokenizer = None
 
     def is_model_saved(self):
         """Check if the model and tokenizer are saved locally."""
-        try:
-            required_files = ["config.json", "tokenizer.json", "tokenizer_config.json"]
-            return all(os.path.exists(os.path.join(self.save_dir, f)) for f in required_files)
-        except Exception as e:
-            print(f"Error checking if model is saved: {e}")
-            logging.error(f"Error checking if model is saved: {e}")
+        if not os.path.isdir(self.save_dir):
             return False
+        config_exists = os.path.exists(os.path.join(self.save_dir, "config.json"))
+        tokenizer_exists = any(
+            os.path.exists(os.path.join(self.save_dir, name))
+            for name in ("tokenizer.json", "tokenizer.model")
+        )
+        weights_exist = any(
+            os.path.exists(os.path.join(self.save_dir, name))
+            for name in (
+                "model.safetensors",
+                "model.safetensors.index.json",
+                "pytorch_model.bin",
+                "pytorch_model.bin.index.json",
+            )
+        )
+        return config_exists and tokenizer_exists and weights_exist
 
     def initialize_model(self):
         """Initialize and load the model and tokenizer."""
         try:
             if not self.is_model_saved():
                 print(f"Model {self.model_name} not found locally. Downloading from Hugging Face...")
-                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-                self.model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16)
+                local_only = env_flag("MODEL_LOCAL_FILES_ONLY", default=False)
+                dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.model_name, local_files_only=local_only
+                )
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    torch_dtype=dtype,
+                    local_files_only=local_only,
+                )
                 
                 # Add a padding token if it does not exist
                 if self.tokenizer.pad_token is None:
@@ -44,7 +65,10 @@ class BaseModelHandler:
                 # Load model and tokenizer from local directory
                 print(f"Loading model {self.model_name} from local directory: {self.save_dir}")
                 self.tokenizer = AutoTokenizer.from_pretrained(self.save_dir)
-                self.model = AutoModelForCausalLM.from_pretrained(self.save_dir, torch_dtype=torch.float16)
+                dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.save_dir, torch_dtype=dtype
+                )
                 # Add a padding token if it does not exist
                 if self.tokenizer.pad_token is None:
                     if self.tokenizer.eos_token:
@@ -62,10 +86,41 @@ class BaseModelHandler:
             logging.error(f"Error checking if model is saved: {e}")
             raise
 
-    def generate_response(self, prompt, max_new_tokens=1024, temperature=0.4, top_k=50, top_p=0.93):
+    def format_prompt(self, query, context, template=None):
+        if template:
+            return generate_prompt(context, query, template, self.prompt_style)
+        if self.tokenizer is not None and getattr(self.tokenizer, "chat_template", None):
+            try:
+                return self.tokenizer.apply_chat_template(
+                    build_chat_messages(query, context),
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+            except (TypeError, ValueError) as error:
+                logging.warning(
+                    "Tokenizer chat template failed (%s); using %s fallback",
+                    error,
+                    self.prompt_style,
+                )
+        return generate_prompt(context, query, prompt_style=self.prompt_style)
+
+    def generate_response(
+        self,
+        prompt,
+        max_new_tokens=MAX_NEW_TOKENS,
+        temperature=0.4,
+        top_k=50,
+        top_p=0.93,
+    ):
         """Generate a response from the model given a prompt."""
         try:
-            inputs = self.tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=2048)
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=MAX_PROMPT_TOKENS,
+            )
             device = "cuda" if torch.cuda.is_available() else "cpu"
             inputs = {key: value.to(device) for key, value in inputs.items()}
 
@@ -99,5 +154,5 @@ class BaseModelHandler:
             return self.tokenizer.decode(output[0][start_index:], skip_special_tokens=True)
         except Exception as e:
             print(f"Error during model inference: {e}")
-            logging.error(f"Error checking if model is saved: {e}")
+            logging.error("Error during model inference: %s", e)
             raise

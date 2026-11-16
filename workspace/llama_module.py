@@ -4,7 +4,8 @@ class LlamaModelHandler(BaseModelHandler):
     def __init__(self):
         super().__init__(
             model_name="meta-llama/Llama-2-7b-chat-hf", 
-            save_dir="/models/saved_llama_model"
+            save_dir="/models/saved_llama_model",
+            prompt_style="llama2",
         )
 
 # Instantiate and initialize LLaMA model

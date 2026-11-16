@@ -1,110 +1,188 @@
-import os
-import fitz  # PyMuPDF
-import faiss
+from pathlib import Path
+
 import numpy as np
-from sentence_transformers import SentenceTransformer
-import pickle
-import shared_state  # Import the shared index and mappings from shared_state
+import pymupdf
 
-FAISS_DIMENSION = 1024
-# Initialize the sentence transformer model (to convert text to embeddings)
-model = SentenceTransformer('intfloat/multilingual-e5-large')
-# English
-#model = SentenceTransformer('all-distilroberta-v1')
+import shared_state
+from index_utils import (
+    IndexCompatibilityError,
+    chunk_sections,
+    embedding_text,
+    load_index_state,
+    save_index_state,
+)
+from rag_config import (
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    DATA_DIR,
+    EMBEDDING_DIMENSION,
+    EMBEDDING_MODEL_NAME,
+)
 
-# FAISS index file and text mapping paths
-FAISS_INDEX_PATH = "./workspace/data/pdf/index.faiss"
-TEXT_MAPPING_PATH = "./workspace/data/pdf/text_mapping.pkl"
 
-# Initialize FAISS index
-index = faiss.IndexFlatL2(FAISS_DIMENSION)
-indexed_text_mapping = []
-# Save FAISS index to disk
-def save_faiss_index():
-    faiss.write_index(shared_state.index, FAISS_INDEX_PATH)
+PDF_INDEX_PATH = DATA_DIR / "pdf" / "index.faiss"
+PDF_MAPPING_PATH = DATA_DIR / "pdf" / "text_mapping.json"
 
-# Save text mappings to disk
-def save_mappings():
-    with open(TEXT_MAPPING_PATH, 'wb') as f:
-        pickle.dump(shared_state.indexed_text_mapping, f)
+_embedding_model = None
 
-# Function to load FAISS index from disk
-def load_faiss_index(embedding_size=FAISS_DIMENSION):
-    if os.path.exists(FAISS_INDEX_PATH):
-        return faiss.read_index(FAISS_INDEX_PATH)
-    else:
-        return faiss.IndexFlatL2(embedding_size)
 
-# Function to load text mappings from disk
-def load_mappings():
-    if os.path.exists(TEXT_MAPPING_PATH):
-        with open(TEXT_MAPPING_PATH, 'rb') as f:
-            shared_state.indexed_text_mapping = pickle.load(f)
+def get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        from sentence_transformers import SentenceTransformer
 
-# Function to extract sections from PDFs
+        _embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    return _embedding_model
+
+
+def is_heading(span, minimum_size=14):
+    # PyMuPDF flag bit 16 marks bold text; bit 1 marks superscript.
+    flags = int(span.get("flags", 0))
+    return float(span.get("size", 0)) >= minimum_size or bool(flags & 16)
+
+
+def _flush_section(sections, title, content, page):
+    normalized = " ".join(content.split())
+    if normalized:
+        sections.append({"title": title or "Introduction", "text": normalized, "page": page})
+
+
 def extract_sections_from_pdf(pdf_path):
-    doc = fitz.open(pdf_path)
     sections = []
     current_heading = "Introduction"
     current_content = ""
+    current_page = 1
 
-    for page_num in range(len(doc)):
-        page = doc.load_page(page_num)
-        blocks = page.get_text("dict")["blocks"]
+    with pymupdf.open(pdf_path) as document:
+        for page_number, page in enumerate(document, start=1):
+            for block in page.get_text("dict").get("blocks", []):
+                for line in block.get("lines", []):
+                    spans = line.get("spans", [])
+                    text = " ".join(span.get("text", "").strip() for span in spans).strip()
+                    if not text:
+                        continue
+                    if any(is_heading(span) for span in spans):
+                        _flush_section(
+                            sections, current_heading, current_content, current_page
+                        )
+                        current_heading = text
+                        current_content = ""
+                        current_page = page_number
+                    else:
+                        current_content += f" {text}"
 
-        for block in blocks:
-            if "lines" in block:
-                for line in block["lines"]:
-                    for span in line["spans"]:
-                        text = span["text"].strip()
-                        if is_heading(span):
-                            if current_heading and current_content:
-                                sections.append({"title": current_heading, "text": current_content.strip()})
-                                current_content = ""
-                            current_heading = text
-                        else:
-                            current_content += " " + text
-    if current_heading and current_content:
-        sections.append({"title": current_heading, "text": current_content.strip()})
-
+    _flush_section(sections, current_heading, current_content, current_page)
     return sections
 
-# Helper function to detect if a block is a heading based on font size and style
-def is_heading(span):
-    font_size = span["size"]
-    is_bold = span["flags"] & 1
-    return font_size > 12 or is_bold
 
-# Function to add PDFs to the FAISS index
-def update_pdf_index(pdf_folder):
-    global indexed_text_mapping
-    for filename in os.listdir(pdf_folder):
-        if filename.endswith(".pdf"):
-            file_path = os.path.join(pdf_folder, filename)
-            sections = extract_sections_from_pdf(file_path)
-            for section in sections:
-                chunk_text = f"{section['title']} - {section['text']}"
-                description = f"{section['title']} - {section['text']} [{filename}]"
-                chunk_embedding = model.encode([chunk_text])
+def extract_sections_from_text(text_path):
+    sections = []
+    current_heading = "Introduction"
+    current_content = []
 
-                print(f"FAISS index dimension: {shared_state.index.d}")
-                print(f"New embedding shape: {np.array(chunk_embedding).shape}")
+    with Path(text_path).open("r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                current_content.append("")
+                continue
+            if stripped.startswith("#"):
+                _flush_section(
+                    sections, current_heading, " ".join(current_content), 1
+                )
+                current_heading = stripped.lstrip("#").strip()
+                current_content = []
+            else:
+                current_content.append(stripped)
 
-                shared_state.index.add(np.array(chunk_embedding).astype(np.float32))
-                shared_state.indexed_text_mapping.append(description)
+    _flush_section(sections, current_heading, " ".join(current_content), 1)
+    return sections
 
-# Function to clear index and reset mappings
+
+def _encode_passages(chunks, embedding_model=None):
+    model = embedding_model or get_embedding_model()
+    passages = [f"passage: {embedding_text(chunk)}" for chunk in chunks]
+    vectors = model.encode(
+        passages,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+    )
+    vectors = np.asarray(vectors, dtype=np.float32)
+    if vectors.ndim == 1:
+        vectors = vectors.reshape(1, -1)
+    return vectors
+
+
+def add_chunks(chunks, embedding_model=None, index=None, mappings=None):
+    index = shared_state.index if index is None else index
+    mappings = shared_state.indexed_text_mapping if mappings is None else mappings
+    if not chunks:
+        return 0
+    vectors = _encode_passages(chunks, embedding_model)
+    if vectors.shape[1] != index.d:
+        raise IndexCompatibilityError(
+            f"Embedding dimension is {vectors.shape[1]}, index expects {index.d}"
+        )
+    index.add(vectors)
+    mappings.extend(chunks)
+    return len(chunks)
+
+
+def update_pdf_index(pdf_folder, embedding_model=None):
+    chunks = []
+    for path in sorted(Path(pdf_folder).glob("*.pdf"), key=lambda item: item.name):
+        sections = extract_sections_from_pdf(path)
+        chunks.extend(
+            chunk_sections(
+                sections,
+                source=path,
+                chunk_size=CHUNK_SIZE,
+                overlap=CHUNK_OVERLAP,
+            )
+        )
+    return add_chunks(chunks, embedding_model)
+
+
+def update_text_index(text_folder, embedding_model=None):
+    chunks = []
+    paths = sorted(
+        [*Path(text_folder).glob("*.md"), *Path(text_folder).glob("*.txt")],
+        key=lambda item: item.name,
+    )
+    for path in paths:
+        sections = extract_sections_from_text(path)
+        chunks.extend(
+            chunk_sections(
+                sections,
+                source=path,
+                chunk_size=CHUNK_SIZE,
+                overlap=CHUNK_OVERLAP,
+            )
+        )
+    return add_chunks(chunks, embedding_model)
+
+
 def clear_index():
     shared_state.index.reset()
     shared_state.indexed_text_mapping.clear()
 
-# Main function to initialize FAISS and load existing data
-def initialize():
-    # Initialize FAISS index and load data into shared state
-    shared_state.index = load_faiss_index(embedding_size=FAISS_DIMENSION)
-    load_mappings()
 
-# Function to save index and mappings after updates
+def load_index(
+    index_path=PDF_INDEX_PATH,
+    mapping_path=PDF_MAPPING_PATH,
+    dimension=EMBEDDING_DIMENSION,
+):
+    return load_index_state(index_path, mapping_path, dimension)
+
+
+def initialize():
+    shared_state.index, shared_state.indexed_text_mapping = load_index()
+
+
 def save_index_and_mappings():
-    save_faiss_index()  # Save FAISS index to disk
-    save_mappings()     # Save text mappings to disk
+    save_index_state(
+        shared_state.index,
+        shared_state.indexed_text_mapping,
+        PDF_INDEX_PATH,
+        PDF_MAPPING_PATH,
+    )

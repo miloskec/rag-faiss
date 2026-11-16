@@ -1,149 +1,146 @@
-import os
-import fitz  # PyMuPDF for PDF processing
-import faiss
-import numpy as np
-from sentence_transformers import SentenceTransformer
-import pickle
-import docx  # Python-docx for Word processing
-from odf.opendocument import load  # ODFpy for ODT processing
+from pathlib import Path
+
+import docx
+from odf import teletype
+from odf.opendocument import load
 from odf.text import P
-import shared_state  # Import the shared index and mappings from shared_state
-import logging
 
-FAISS_DIMENSION = 1024
-# Initialize the sentence transformer model (to convert text to embeddings)
-model = SentenceTransformer('intfloat/multilingual-e5-large')
-# English
-#model = SentenceTransformer('all-distilroberta-v1')
+import shared_state
+from index_utils import (
+    IndexCompatibilityError,
+    chunk_sections,
+    load_index_state,
+    save_index_state,
+)
+from pdf_indexer import _encode_passages
+from rag_config import CHUNK_OVERLAP, CHUNK_SIZE, DATA_DIR, EMBEDDING_DIMENSION
 
-# FAISS index file and text mapping paths
-FAISS_INDEX_PATH = "./workspace/data/doc/index.faiss"
-TEXT_MAPPING_PATH = "./workspace/data/doc/text_mapping.pkl"
 
-# Initialize FAISS index
-index_doc = faiss.IndexFlatL2(FAISS_DIMENSION)
-indexed_text_mapping_doc = []
+DOC_INDEX_PATH = DATA_DIR / "doc" / "index.faiss"
+DOC_MAPPING_PATH = DATA_DIR / "doc" / "text_mapping.json"
 
-# Save FAISS index to disk
-def save_faiss_index():
-    faiss.write_index(shared_state.index_doc, FAISS_INDEX_PATH)
 
-# Save text mappings to disk
-def save_mappings():
-    with open(TEXT_MAPPING_PATH, 'wb') as f:
-        pickle.dump(shared_state.indexed_text_mapping_doc, f)
+def _flush_section(sections, title, content):
+    normalized = " ".join(content.split())
+    if normalized:
+        sections.append({"title": title or "Introduction", "text": normalized, "page": None})
 
-# Function to load FAISS index from disk
-def load_faiss_index(embedding_size=FAISS_DIMENSION):
-    if os.path.exists(FAISS_INDEX_PATH):
-        return faiss.read_index(FAISS_INDEX_PATH)
-    else:
-        return faiss.IndexFlatL2(embedding_size)
 
-# Function to load text mappings from disk
-def load_mappings():
-    if os.path.exists(TEXT_MAPPING_PATH):
-        with open(TEXT_MAPPING_PATH, 'rb') as f:
-            shared_state.indexed_text_mapping_doc = pickle.load(f)
-
-# Function to extract sections from Word documents
 def extract_sections_from_word(docx_path):
-    try:    
-        doc = docx.Document(docx_path)
-        sections = []
-        current_heading = "Introduction"
-        current_content = ""
+    sections = []
+    current_heading = "Introduction"
+    current_content = []
+    for paragraph in docx.Document(docx_path).paragraphs:
+        text = paragraph.text.strip()
+        if not text:
+            continue
+        if is_heading_word(paragraph):
+            _flush_section(sections, current_heading, " ".join(current_content))
+            current_heading = text
+            current_content = []
+        else:
+            current_content.append(text)
+    _flush_section(sections, current_heading, " ".join(current_content))
+    return sections
 
-        for para in doc.paragraphs:
-            if is_heading_word(para):
-                if current_heading and current_content:
-                    sections.append({"title": current_heading, "text": current_content.strip()})
-                    current_content = ""
-                current_heading = para.text
-            else:
-                current_content += " " + para.text
 
-        if current_heading and current_content:
-            sections.append({"title": current_heading, "text": current_content.strip()})
-
-        return sections
-    except Exception as e:
-        logging.error(f"Error processing Word document: {docx_path}")
-        logging.error(str(e))
-        return []
-
-# Function to extract sections from ODT files
 def extract_sections_from_odt(odt_path):
-    try:
-        doc = load(odt_path)
-        sections = []
-        current_heading = "Introduction"
-        current_content = ""
+    sections = []
+    current_heading = "Introduction"
+    current_content = []
+    document = load(str(odt_path))
+    for paragraph in document.getElementsByType(P):
+        text = teletype.extractText(paragraph).strip()
+        if not text:
+            continue
+        if is_heading_odt(paragraph):
+            _flush_section(sections, current_heading, " ".join(current_content))
+            current_heading = text
+            current_content = []
+        else:
+            current_content.append(text)
+    _flush_section(sections, current_heading, " ".join(current_content))
+    return sections
 
-        for paragraph in doc.getElementsByType(P):
-            para_text = "".join([node.data for node in paragraph.childNodes if hasattr(node, 'data')])
-            if is_heading_odt(paragraph):
-                if current_heading and current_content:
-                    sections.append({"title": current_heading, "text": current_content.strip()})
-                    current_content = ""
-                current_heading = para_text
-            else:
-                current_content += " " + para_text
 
-        if current_heading and current_content:
-            sections.append({"title": current_heading, "text": current_content.strip()})
+def is_heading_word(paragraph):
+    style = paragraph.style.name if paragraph.style is not None else ""
+    return style.startswith("Heading")
 
-        return sections
-    except Exception as e:
-        logging.error(f"Error processing ODT file: {odt_path}")
-        logging.error(str(e))
-        return []
 
-# Helper function to detect if a paragraph is a heading based on style in Word documents
-def is_heading_word(para):
-    return para.style.name.startswith('Heading')
+def is_heading_odt(paragraph):
+    style = paragraph.getAttribute("stylename")
+    if not style:
+        style = paragraph.attributes.get("text:style-name", "")
+    return str(style).startswith("Heading")
 
-# Helper function to detect if a paragraph is a heading in ODT files (basic check)
-def is_heading_odt(para):
-    return para.attributes.get('text:style-name', '').startswith('Heading')
 
-# Function to add Word or ODT files to the FAISS index
-def update_doc_index(doc_folder):
-    try:
-        global indexed_text_mapping_doc
-        for filename in os.listdir(doc_folder):
-            file_path = os.path.join(doc_folder, filename)
+def extract_sections_for_path(path):
+    if path.suffix.lower() == ".docx":
+        return extract_sections_from_word(path)
+    if path.suffix.lower() == ".odt":
+        return extract_sections_from_odt(path)
+    return []
 
-            if filename.endswith(".docx"):
-                sections = extract_sections_from_word(file_path)
-            elif filename.endswith(".odt"):
-                sections = extract_sections_from_odt(file_path)
-            else:
-                print(f"Unsupported file format: {filename}")
-                continue
 
-            for section in sections:
-                chunk_text = f"{section['title']} - {section['text']}"
-                description = f"{section['title']} - {section['text']} [{filename}]"
-                chunk_embedding = model.encode([chunk_text])
-                shared_state.index_doc.add(np.array(chunk_embedding).astype(np.float32))
-                shared_state.indexed_text_mapping_doc.append(description)
-    except Exception as e:
-        logging.error(f"Error processing document: {file_path}")
-        logging.error(str(e))
-        
-# Function to clear index and reset mappings
+def add_chunks(chunks, embedding_model=None, index=None, mappings=None):
+    index = shared_state.index_doc if index is None else index
+    mappings = shared_state.indexed_text_mapping_doc if mappings is None else mappings
+    if not chunks:
+        return 0
+    vectors = _encode_passages(chunks, embedding_model)
+    if vectors.shape[1] != index.d:
+        raise IndexCompatibilityError(
+            f"Embedding dimension is {vectors.shape[1]}, index expects {index.d}"
+        )
+    index.add(vectors)
+    mappings.extend(chunks)
+    return len(chunks)
+
+
+def update_doc_index(doc_folder, embedding_model=None):
+    chunks = []
+    paths = sorted(
+        [
+            *Path(doc_folder).glob("*.docx"),
+            *Path(doc_folder).glob("*.odt"),
+        ],
+        key=lambda item: item.name,
+    )
+    for path in paths:
+        sections = extract_sections_for_path(path)
+        chunks.extend(
+            chunk_sections(
+                sections,
+                source=path,
+                chunk_size=CHUNK_SIZE,
+                overlap=CHUNK_OVERLAP,
+            )
+        )
+    return add_chunks(chunks, embedding_model)
+
+
 def clear_index():
     shared_state.index_doc.reset()
     shared_state.indexed_text_mapping_doc.clear()
 
-# Main function to initialize FAISS and load existing data
-def initialize():
-    # Initialize FAISS index and load data into shared state
-    shared_state.index_doc = load_faiss_index(embedding_size=FAISS_DIMENSION)
-    load_mappings()
 
-# Function to save index and mappings after updates
+def load_index(
+    index_path=DOC_INDEX_PATH,
+    mapping_path=DOC_MAPPING_PATH,
+    dimension=EMBEDDING_DIMENSION,
+):
+    return load_index_state(index_path, mapping_path, dimension)
+
+
+def initialize():
+    shared_state.index_doc, shared_state.indexed_text_mapping_doc = load_index()
+
+
 def save_index_and_mappings():
-    save_faiss_index()  # Save FAISS index to disk
-    save_mappings()     # Save text mappings to disk
+    save_index_state(
+        shared_state.index_doc,
+        shared_state.indexed_text_mapping_doc,
+        DOC_INDEX_PATH,
+        DOC_MAPPING_PATH,
+    )

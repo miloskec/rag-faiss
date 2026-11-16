@@ -1,0 +1,13 @@
+.git
+.venv
+.env
+model-cache
+llama-7b-hf
+mistral-7b-instruct
+qwen2.5-7b-instruct
+sambalingo-chat
+tests
+workspace/__pycache__
+workspace/data
+workspace/legacy_artifacts
+workspace/logs

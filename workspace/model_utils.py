@@ -1,76 +1,82 @@
-import os
+import gc
+import logging
+import threading
+
 import torch
+
 from llama_module import LlamaModelHandler
 from mistral_module import MistralModelHandler
+from prompting import generate_prompt
 from qwen_module import QwenModelHandler
+from rag_config import DEFAULT_MODEL
 from sambalingo_module import SambalingoModelHandler
-import logging
 
-# Global variable to keep track of the currently loaded model and its name
-model_cache = {
-    'current_model': None,
-    'model_name': None
+
+MODEL_HANDLERS = {
+    "llama-7b-hf": LlamaModelHandler,
+    "mistral-7b-instruct": MistralModelHandler,
+    "qwen2.5-7b-instruct": QwenModelHandler,
+    "sambalingo-chat": SambalingoModelHandler,
 }
 
+model_cache = {"current_model": None, "model_name": None}
+_model_lock = threading.Lock()
+
+
 def unload_current_model():
-    try:
-        """Unloads the current model from memory to free up resources."""
-        if model_cache['current_model'] is not None:
-            print(f"Unloading model: {model_cache['model_name']}")
-            del model_cache['current_model']
-            torch.cuda.empty_cache()  # Clear the GPU memory
-            model_cache['current_model'] = None
-            model_cache['model_name'] = None
-    except Exception as e:
-        logging.error(f"Error unloading model: {str(e)}")
-        return {"error": str(e)}
+    with _model_lock:
+        handler = model_cache["current_model"]
+        if handler is not None:
+            logging.info("Unloading model: %s", model_cache["model_name"])
+            if hasattr(handler, "model"):
+                handler.model = None
+            if hasattr(handler, "tokenizer"):
+                handler.tokenizer = None
+            model_cache["current_model"] = None
+            model_cache["model_name"] = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     return {"status": "unloaded"}
 
+
 def get_model_handler(selected_model=None):
-    try:
-        """Dynamically select the model and cache it to avoid reloading unnecessarily."""
-        global model_cache
+    """Return an initialized handler, raising an explicit error on invalid input."""
+    selected_model = (selected_model or DEFAULT_MODEL).strip().lower()
+    with _model_lock:
+        if selected_model == model_cache["model_name"]:
+            return model_cache["current_model"]
 
-        if not selected_model:
-            selected_model = os.getenv('MODEL', 'llama-7b-hf')  # Default to LLaMA
+        handler_class = MODEL_HANDLERS.get(selected_model)
+        if handler_class is None:
+            supported = ", ".join(sorted(MODEL_HANDLERS))
+            raise ValueError(
+                f"Unknown model selection: {selected_model}. Supported models: {supported}"
+            )
 
-        if selected_model == model_cache['model_name']:
-            # If the selected model is already loaded, return it
-            print(f"Using cached model: {model_cache['model_name']}")
-            return model_cache['current_model']
+        if model_cache["current_model"] is not None:
+            previous = model_cache["current_model"]
+            previous.model = None
+            previous.tokenizer = None
+            model_cache["current_model"] = None
+            model_cache["model_name"] = None
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
-        # If another model is selected, unload the current model
-        unload_current_model()
-
-        # Load the new model
-        if selected_model == 'llama-7b-hf':
-            handler = LlamaModelHandler()
-        elif selected_model == 'mistral-7b-instruct':
-            handler = MistralModelHandler()
-        elif selected_model == 'qwen2.5-7B':
-            handler = QwenModelHandler()
-        elif selected_model == 'sambalingo':
-            handler = SambalingoModelHandler()
-        else:
-            raise ValueError(f"Unknown model selection: {selected_model}")
-
-        # Initialize and cache the new model
+        handler = handler_class()
         handler.initialize_model()
-        model_cache['current_model'] = handler
-        model_cache['model_name'] = selected_model
-
+        model_cache["current_model"] = handler
+        model_cache["model_name"] = selected_model
         return handler
-    except Exception as e:
-        logging.error(f"Error loading model: {str(e)}")
-        return {"error": str(e)}
 
-def generate_prompt(context, query, template=None):
-    """Generate the prompt for the model."""
-    if template:
-        return template.format(context=context, query=query)
-    return f"""<s>[INST]Use the following context to answer the question. Do not repeat the context or provide instructions in the answer. {context} You should answer the following question:[/INST]{query}</s>"""
 
 def query_model(model_handler, query, context, template=None):
-    """Generate the response using the provided model handler."""
-    prompt = generate_prompt(context, query, template)
+    if model_handler is None or not hasattr(model_handler, "generate_response"):
+        raise ValueError("A valid initialized model handler is required")
+    if hasattr(model_handler, "format_prompt"):
+        prompt = model_handler.format_prompt(query, context, template)
+    else:
+        prompt_style = getattr(model_handler, "prompt_style", "plain")
+        prompt = generate_prompt(context, query, template, prompt_style)
     return model_handler.generate_response(prompt)

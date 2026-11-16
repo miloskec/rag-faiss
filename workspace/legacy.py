@@ -1,8 +1,6 @@
 import os
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from langchain.prompts import PromptTemplate
-
 # Global variables for the model and tokenizer
 model = None
 tokenizer = None

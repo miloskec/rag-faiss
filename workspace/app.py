@@ -1,71 +1,163 @@
-from flask import Flask, request, jsonify
-import pdf_indexer as pdf_indexer
-import doc_indexer as doc_indexer
-import searcher
 import logging
-from datetime import datetime
 import os
+from datetime import datetime
+
 from dotenv import load_dotenv
+from flask import Flask, jsonify, request
+
+import doc_indexer
+import pdf_indexer
+import searcher
+from index_utils import IndexCompatibilityError
+from rag_config import (
+    DEFAULT_RAG_MODE,
+    DEFAULT_TOP_K,
+    FEED_DIR,
+    LOG_DIR,
+    SYNTHETIC_CORPUS_DIR,
+    env_flag,
+    normalize_rag_mode,
+)
+
+
 load_dotenv()
-# Initialize Flask app
-app = Flask(__name__)
 
-# Route to update the index
-@app.route('/update-index', methods=['GET'])
-def update_index():
-    data = request.args
-    type = data.get('type', 'pdf')
-    print(f"Updating index for {type} files")
-    if type == 'doc' or type == 'docx':
-        doc_indexer.clear_index()
-        docx_folder = "./workspace/feed/doc"
-        doc_indexer.update_doc_index(docx_folder)
-        doc_indexer.save_index_and_mappings()
-    else:
-        pdf_indexer.clear_index()
-        pdf_folder = "./workspace/feed/pdf"
-        pdf_indexer.update_pdf_index(pdf_folder)
-        pdf_indexer.save_index_and_mappings()
-        
-    return jsonify({"status": "updated"})
 
-# Route to search the index
-@app.route('/search', methods=['POST'])
-def search():
-    data = request.get_json()
-    query = data.get('query', '')
-    template = data.get('template', '')
-    context_type = data.get('context_type', 'pdf')
-    model = data.get('model', '')
-    if not query:
-        return jsonify({"error": "No query provided"}), 400
-    search_results = searcher.search_index(model, query, template, context_type, top_k=5)
-    return jsonify({"query": query, "results": search_results})
+def create_app():
+    app = Flask(__name__)
 
-@app.route('/clean-resources', methods=['GET'])
-# Unload current model
-def unload_current_model():
+    @app.get("/health")
+    def health():
+        return jsonify({"status": "ok"})
+
+    @app.post("/update-index")
+    def update_index():
+        index_type = (request.args.get("type") or "pdf").strip().lower()
+        try:
+            if index_type in {"doc", "docx", "odt"}:
+                doc_indexer.clear_index()
+                count = doc_indexer.update_doc_index(FEED_DIR / "doc")
+                doc_indexer.save_index_and_mappings()
+            elif index_type == "synthetic":
+                pdf_indexer.clear_index()
+                count = pdf_indexer.update_text_index(SYNTHETIC_CORPUS_DIR)
+                pdf_indexer.save_index_and_mappings()
+            elif index_type == "pdf":
+                pdf_indexer.clear_index()
+                count = pdf_indexer.update_pdf_index(FEED_DIR / "pdf")
+                pdf_indexer.save_index_and_mappings()
+            else:
+                return jsonify({"error": "type must be pdf, doc, or synthetic"}), 400
+        except IndexCompatibilityError as error:
+            logging.exception("Index rebuild failed")
+            return jsonify({"error": str(error)}), 409
+        except Exception as error:
+            logging.exception("Index rebuild failed")
+            return jsonify({"error": f"Index rebuild failed: {error}"}), 500
+
+        return jsonify(
+            {"status": "updated", "type": index_type, "chunks_indexed": count}
+        )
+
+    @app.post("/search")
+    def search():
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "JSON object body is required"}), 400
+
+        query = data.get("query", "")
+        if not isinstance(query, str) or not query.strip():
+            return jsonify({"error": "No query provided"}), 400
+        if len(query) > 4000:
+            return jsonify({"error": "query is too long"}), 400
+
+        context_type = data.get("context_type", "pdf")
+        if not isinstance(context_type, str) or context_type not in {
+            "pdf",
+            "synthetic",
+            "doc",
+            "docx",
+            "odt",
+        }:
+            return jsonify({"error": "Invalid context_type"}), 400
+        mode_value = data.get("mode", DEFAULT_RAG_MODE)
+        if not isinstance(mode_value, str):
+            return jsonify({"error": "mode must be a string"}), 400
+        try:
+            mode = normalize_rag_mode(mode_value)
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+
+        top_k = data.get("top_k", DEFAULT_TOP_K)
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 100:
+            return jsonify({"error": "top_k must be an integer between 1 and 100"}), 400
+        model = data.get("model")
+        if model is not None and not isinstance(model, str):
+            return jsonify({"error": "model must be a string"}), 400
+        template = data.get("template")
+        if template is not None and not isinstance(template, str):
+            return jsonify({"error": "template must be a string"}), 400
+
+        try:
+            result = searcher.search_index(
+                model,
+                query.strip(),
+                template=template,
+                context_type=context_type,
+                top_k=top_k,
+                mode=mode,
+            )
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+        except IndexCompatibilityError as error:
+            return jsonify({"error": str(error)}), 409
+        except Exception as error:
+            logging.exception("Search failed")
+            return jsonify({"error": f"Search failed: {error}"}), 500
+
+        return jsonify({"query": query.strip(), **result})
+
+    @app.post("/clean-resources")
+    def unload_current_model():
+        try:
+            result = searcher.unload_model()
+        except Exception as error:
+            logging.exception("Model unload failed")
+            return jsonify({"error": str(error)}), 500
+        return jsonify(result)
+
+    return app
+
+
+app = create_app()
+
+
+def configure_logging():
+    log_format = "%(asctime)s - %(levelname)s - %(message)s"
     try:
-        result = searcher.unload_model()
-    except Exception as e:
-        result = {"error": str(e)}
-    return jsonify(result)
-# Main entry point
-if __name__ == "__main__":
-    # Initialize FAISS index and mappings before running the app
-    pdf_indexer.initialize()  # Load the index and mappings into shared state
-    doc_indexer.initialize()  # Load the index and mappings into shared state
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        logging.basicConfig(
+            filename=LOG_DIR / f"main_{timestamp}.log",
+            level=logging.INFO,
+            format=log_format,
+            force=True,
+        )
+    except OSError as error:
+        logging.basicConfig(level=logging.INFO, format=log_format, force=True)
+        logging.warning("File logging unavailable (%s); logging to stderr", error)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = f"workspace/logs/main_{timestamp}.log"
-    log_dir = os.path.dirname(log_file)
-    if log_dir and not os.path.exists(log_dir):
-            os.makedirs(log_dir, exist_ok=True)  # Create the directory if it doesn't exist
 
-    # Configure logging to output to a file
-    logging.basicConfig( 
-        filename=f"workspace/logs/main_{timestamp}.log",  # The name of the log file
-        level=logging.ERROR,  # The logging level
-        format='%(asctime)s - %(levelname)s - %(message)s'  # The format of log messages
+def main():
+    pdf_indexer.initialize()
+    doc_indexer.initialize()
+    configure_logging()
+    app.run(
+        host=os.getenv("HOST", "127.0.0.1"),
+        port=int(os.getenv("PORT", "5000")),
+        debug=env_flag("FLASK_DEBUG", default=False),
     )
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+
+if __name__ == "__main__":
+    main()
