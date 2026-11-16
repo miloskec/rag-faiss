@@ -142,6 +142,7 @@ def rerank_candidates(query, candidates, reranker=None):
 def assemble_context(results, max_chars=MAX_CONTEXT_CHARS):
     if max_chars <= 0:
         raise ValueError("max_chars must be positive")
+    truncation_marker = " [...]"
     pieces = []
     used = 0
     for result in results:
@@ -156,8 +157,12 @@ def assemble_context(results, max_chars=MAX_CONTEXT_CHARS):
         if remaining <= len(header) + 1:
             break
         if len(candidate) > remaining:
-            available_body = remaining - len(header) - 1
-            candidate = f"{header}\n{body[:available_body].rstrip()} [...]"
+            body_budget = remaining - len(header) - 1
+            marker_budget = min(len(truncation_marker), body_budget)
+            text_budget = max(body_budget - marker_budget, 0)
+            body_text = body[:text_budget].rstrip()
+            marker = truncation_marker[:marker_budget]
+            candidate = f"{header}\n{body_text}{marker}"
         pieces.append(candidate)
         used += len(separator) + len(candidate)
         if used >= max_chars:

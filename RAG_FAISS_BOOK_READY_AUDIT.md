@@ -95,7 +95,7 @@ actually verified.
 | --- | --- | --- | --- |
 | P1-1 | Docker installed an unpinned dependency set on every start | Startup ran a long `pip3 install` command with floating versions | Added pinned `requirements.txt`, `.dockerignore`, a pinned base-image digest, and image-build installation |
 | P1-2 | Flask debug and mutating GET endpoints were unsafe defaults | `debug=True`; index update and cleanup used GET | Debug defaults to false; mutating endpoints are POST; local bind defaults to `127.0.0.1` |
-| P1-3 | Index persistence allowed partial or mismatched state | Pickle mapping, no dimension check, no mapping-count check | FAISS and JSON mapping are written to temporary paths then atomically replaced; mismatches fail explicitly |
+| P1-3 | Index persistence allowed partial or mismatched state | Pickle mapping, no dimension check, no mapping-count check | Each pair is written into a complete generation directory; one atomically replaced manifest publishes the active pair |
 | P1-4 | Relative paths depended on container working directory | Paths used `./workspace/...` | Runtime paths are anchored to the module directory |
 | P1-5 | E5 retrieval prefixes were absent | Embeddings encoded raw text | Passages use `passage:` and queries use `query:`; vectors are normalized |
 | P1-6 | Qwen and SambaLingo choices were base models | The prior commit selected `Qwen2.5-7B` and `SambaLingo-Serbian-Base` | Defaults now use `Qwen2.5-7B-Instruct` and `SambaLingo-Serbian-Chat` |
@@ -104,6 +104,10 @@ actually verified.
 | P1-9 | API input errors were inconsistently validated | Non-object JSON, non-string context types, invalid top-K, and malformed templates could reach deeper code | Request types and ranges are validated before retrieval/model work |
 | P1-10 | `.env` was loaded after modules had already read configuration | `rag_config` constants could ignore values in `.env` | The configuration module now loads the project `.env` before reading variables |
 | P1-11 | An unwritable log directory prevented startup | A local launch failed before Flask started when `workspace/logs` was not writable | File logging falls back to stderr and the failure is logged |
+| P1-12 | Context truncation could exceed the character budget | The ` [...]` marker was appended after calculating the body allowance | Marker length is included in the remaining budget and covered by a long-passage regression test |
+| P1-13 | Formatted chat templates could receive duplicate special tokens | A `tokenize=False` template was tokenized again with default special-token insertion | Prepared prompts carry an explicit tokenizer policy; chat-template prompts use `add_special_tokens=False` |
+| P1-14 | A failed index rebuild cleared the active in-memory index | `/update-index` cleared shared state before ingestion completed | Rebuilds use an isolated FAISS/mapping pair and replace shared state only after persistence succeeds |
+| P1-15 | Historical feed documents were included in the Docker build | `COPY workspace` included the Ustav PDF despite unresolved rights | `workspace/feed/` and archived artifacts are excluded from Docker build context |
 
 ### Partial or unresolved
 
@@ -162,7 +166,8 @@ actually verified.
 - Added `/health`.
 - Added request validation and explicit 400/409/500 responses.
 - Replaced runtime pickle loading with JSON mapping loading.
-- Added atomic index/mapping persistence.
+- Added generation-based index publication behind one atomic manifest pointer.
+- Added isolated index rebuilds so failed ingestion preserves the active index.
 - Added index dimension and mapping-count validation.
 - Added pinned requirements, Dockerfile, `.dockerignore`, and Compose health
   checks.
@@ -174,7 +179,7 @@ The following checks were executed in the repository's isolated `.venv`:
 
 | Check | Result |
 | --- | --- |
-| `.venv/bin/python -m pytest -q` | **40 passed** |
+| `.venv/bin/python -m pytest -q` | **45 passed** |
 | Python compile check with isolated bytecode directory | **passed** |
 | Ruff static check for `workspace/` and `tests/` | **passed** |
 | `git diff --check` | **passed** |
@@ -184,7 +189,7 @@ The following checks were executed in the repository's isolated `.venv`:
 | `docker compose build` | **passed**; image `rag-faiss:book-ready` |
 | Container dependency imports | **passed** |
 | Container `python3 -m pip check` | **No broken requirements found** |
-| Container pytest suite | **40 passed** |
+| Container pytest suite | **45 passed** |
 | `docker compose` startup and `/health` request | **200 OK**; debug off |
 | Local Flask startup and `/health` request | **200 OK**; logging fallback tested |
 | Synthetic resolver | **9 chunks from 3 Markdown files** |
@@ -193,6 +198,11 @@ The following checks were executed in the repository's isolated `.venv`:
 | Oversized top-K against undersized index | invalid IDs filtered; only valid candidates returned |
 | RAG v0/v1 comparison | identical initial candidate pool, different final order |
 | Flask synthetic update/search integration | deterministic doubles executed the API flow |
+| Long-passage context limit | truncation marker included; output stayed within budget |
+| Formatted chat-template tokenization | `add_special_tokens=False` propagated through generation |
+| Failed generation publication | previous manifest and active FAISS/mapping pair remained loadable |
+| Failed index rebuild | active in-memory index remained unchanged |
+| Docker build context | historical feed and archived artifacts excluded |
 
 The tests do not claim:
 
@@ -221,6 +231,9 @@ The tests do not claim:
    documented bind is localhost.
 7. **Legal status is incomplete.** The README historically declares MIT, but
    no `LICENSE` file exists. The owner must resolve code and document licensing.
+8. **Old index generations are retained.** Publication is consistent and the
+   prior generation remains recoverable, but automatic retention/pruning
+   policy is intentionally left to the operator.
 
 ## Final book-readiness decision
 

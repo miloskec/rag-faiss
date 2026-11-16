@@ -20,6 +20,11 @@ The basic path is deliberately visible and non-magical:
 8. **Generation:** place the question before the context in a grounded model
    prompt and generate an answer.
 
+Index publication is intentionally separate from indexing: the pipeline first
+builds a complete FAISS/mapping generation and only then switches the active
+pointer. This lets the book discuss failed updates without implying that the
+previous index must be discarded first.
+
 The code exposes `retrieval_results` separately from `search_results`, so the
 book can show which passages vector retrieval found and which passages were
 ultimately used.

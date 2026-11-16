@@ -11,3 +11,4 @@ workspace/__pycache__
 workspace/data
 workspace/legacy_artifacts
 workspace/logs
+workspace/feed

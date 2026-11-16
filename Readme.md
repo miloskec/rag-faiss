@@ -131,6 +131,10 @@ fallback formats cover Llama 2, Mistral, ChatML, and SambaLingo-style prompts.
 Question text is placed before retrieved context so tokenizer truncation
 preserves the question.
 
+Prompt preparation records whether special tokens were already inserted by a
+chat template or fallback formatter. Those formatted prompts are tokenized
+with `add_special_tokens=False` to avoid duplicate BOS/EOS markers.
+
 ## Docker workflow
 
 The container image is built from a pinned base-image digest, and all Python
@@ -169,6 +173,12 @@ Expected shape of the response:
 The first run may download `intfloat/multilingual-e5-large`. The generated
 FAISS index and JSON mapping are local runtime files and are ignored by Git.
 
+Index updates are published as complete generations. The application builds
+and validates a new FAISS/mapping pair first, then atomically updates one
+generation manifest. A failed build or failed publication leaves the previous
+active generation in use. Old generations are retained for manual inspection;
+the example does not automatically prune them.
+
 Other ingestion commands:
 
 ```bash
@@ -203,6 +213,10 @@ The response contains:
 
 Each retrieval result includes `source`, `chunk_id`, `title`, `text`, `page`
 when available, vector distance, and ranking fields.
+
+The context character limit includes source headers and the truncation marker.
+When a passage must be shortened, the complete assembled context remains
+within the configured `RAG_MAX_CONTEXT_CHARS` value.
 
 ## Search with RAG v1
 
@@ -332,6 +346,11 @@ untrusted input.
 The historical `ustav_republike_srbije.pdf` remains in the repository history
 and feed directory. Its provenance and redistribution terms should be reviewed
 before public distribution.
+
+The Docker build context excludes `workspace/feed/` and
+`workspace/legacy_artifacts/`, so the current image does not embed the
+historical PDF or archived binary indexes. Compose still bind-mounts the local
+workspace at runtime when a user intentionally indexes local documents.
 
 The original README declared MIT licensing, but the repository does not contain
 a `LICENSE` file. The author should confirm and add the authoritative license

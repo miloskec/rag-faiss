@@ -74,6 +74,12 @@ def get_model_handler(selected_model=None):
 def query_model(model_handler, query, context, template=None):
     if model_handler is None or not hasattr(model_handler, "generate_response"):
         raise ValueError("A valid initialized model handler is required")
+    if hasattr(model_handler, "prepare_prompt"):
+        prepared = model_handler.prepare_prompt(query, context, template)
+        return model_handler.generate_response(
+            prepared.text,
+            add_special_tokens=prepared.add_special_tokens,
+        )
     if hasattr(model_handler, "format_prompt"):
         prompt = model_handler.format_prompt(query, context, template)
     else:

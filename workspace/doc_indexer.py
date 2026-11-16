@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import docx
+import faiss
 from odf import teletype
 from odf.opendocument import load
 from odf.text import P
@@ -98,7 +99,7 @@ def add_chunks(chunks, embedding_model=None, index=None, mappings=None):
     return len(chunks)
 
 
-def update_doc_index(doc_folder, embedding_model=None):
+def update_doc_index(doc_folder, embedding_model=None, index=None, mappings=None):
     chunks = []
     paths = sorted(
         [
@@ -117,7 +118,22 @@ def update_doc_index(doc_folder, embedding_model=None):
                 overlap=CHUNK_OVERLAP,
             )
         )
-    return add_chunks(chunks, embedding_model)
+    return add_chunks(chunks, embedding_model, index, mappings)
+
+
+def rebuild_doc_index(doc_folder, embedding_model=None):
+    new_index = faiss.IndexFlatL2(EMBEDDING_DIMENSION)
+    new_mappings = []
+    count = update_doc_index(
+        doc_folder,
+        embedding_model=embedding_model,
+        index=new_index,
+        mappings=new_mappings,
+    )
+    save_index_state(new_index, new_mappings, DOC_INDEX_PATH, DOC_MAPPING_PATH)
+    shared_state.index_doc = new_index
+    shared_state.indexed_text_mapping_doc = new_mappings
+    return count
 
 
 def clear_index():

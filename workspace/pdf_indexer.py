@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import faiss
 import numpy as np
 import pymupdf
 
@@ -128,7 +129,7 @@ def add_chunks(chunks, embedding_model=None, index=None, mappings=None):
     return len(chunks)
 
 
-def update_pdf_index(pdf_folder, embedding_model=None):
+def update_pdf_index(pdf_folder, embedding_model=None, index=None, mappings=None):
     chunks = []
     for path in sorted(Path(pdf_folder).glob("*.pdf"), key=lambda item: item.name):
         sections = extract_sections_from_pdf(path)
@@ -140,10 +141,10 @@ def update_pdf_index(pdf_folder, embedding_model=None):
                 overlap=CHUNK_OVERLAP,
             )
         )
-    return add_chunks(chunks, embedding_model)
+    return add_chunks(chunks, embedding_model, index, mappings)
 
 
-def update_text_index(text_folder, embedding_model=None):
+def update_text_index(text_folder, embedding_model=None, index=None, mappings=None):
     chunks = []
     paths = sorted(
         [*Path(text_folder).glob("*.md"), *Path(text_folder).glob("*.txt")],
@@ -159,7 +160,37 @@ def update_text_index(text_folder, embedding_model=None):
                 overlap=CHUNK_OVERLAP,
             )
         )
-    return add_chunks(chunks, embedding_model)
+    return add_chunks(chunks, embedding_model, index, mappings)
+
+
+def rebuild_pdf_index(pdf_folder, embedding_model=None):
+    new_index = faiss.IndexFlatL2(EMBEDDING_DIMENSION)
+    new_mappings = []
+    count = update_pdf_index(
+        pdf_folder,
+        embedding_model=embedding_model,
+        index=new_index,
+        mappings=new_mappings,
+    )
+    save_index_state(new_index, new_mappings, PDF_INDEX_PATH, PDF_MAPPING_PATH)
+    shared_state.index = new_index
+    shared_state.indexed_text_mapping = new_mappings
+    return count
+
+
+def rebuild_text_index(text_folder, embedding_model=None):
+    new_index = faiss.IndexFlatL2(EMBEDDING_DIMENSION)
+    new_mappings = []
+    count = update_text_index(
+        text_folder,
+        embedding_model=embedding_model,
+        index=new_index,
+        mappings=new_mappings,
+    )
+    save_index_state(new_index, new_mappings, PDF_INDEX_PATH, PDF_MAPPING_PATH)
+    shared_state.index = new_index
+    shared_state.indexed_text_mapping = new_mappings
+    return count
 
 
 def clear_index():

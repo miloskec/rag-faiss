@@ -9,6 +9,8 @@ workspace/__pycache__/
 workspace/logs/
 workspace/data/**/index.faiss
 workspace/data/**/text_mapping.json
+workspace/data/**/active_generation.json
+workspace/data/**/generations/
 mistral-7b-instruct/
 llama-7b-hf/
 qwen2.5-7b-instruct/

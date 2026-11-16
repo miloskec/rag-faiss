@@ -1,8 +1,17 @@
+from dataclasses import dataclass
+
+
 GROUNDING_INSTRUCTION = (
     "Answer the question using only the supplied context. "
     "If the context is insufficient, say that the answer is not available. "
     "Do not invent facts or repeat these instructions."
 )
+
+
+@dataclass(frozen=True)
+class PreparedPrompt:
+    text: str
+    add_special_tokens: bool
 
 
 def build_user_content(query, context):

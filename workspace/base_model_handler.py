@@ -2,7 +2,7 @@ import os
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import logging
-from prompting import build_chat_messages, generate_prompt
+from prompting import PreparedPrompt, build_chat_messages, generate_prompt
 from rag_config import MAX_NEW_TOKENS, MAX_PROMPT_TOKENS, env_flag
 
 class BaseModelHandler:
@@ -86,15 +86,21 @@ class BaseModelHandler:
             logging.error(f"Error checking if model is saved: {e}")
             raise
 
-    def format_prompt(self, query, context, template=None):
+    def prepare_prompt(self, query, context, template=None):
         if template:
-            return generate_prompt(context, query, template, self.prompt_style)
+            return PreparedPrompt(
+                generate_prompt(context, query, template, self.prompt_style),
+                add_special_tokens=True,
+            )
         if self.tokenizer is not None and getattr(self.tokenizer, "chat_template", None):
             try:
-                return self.tokenizer.apply_chat_template(
-                    build_chat_messages(query, context),
-                    tokenize=False,
-                    add_generation_prompt=True,
+                return PreparedPrompt(
+                    self.tokenizer.apply_chat_template(
+                        build_chat_messages(query, context),
+                        tokenize=False,
+                        add_generation_prompt=True,
+                    ),
+                    add_special_tokens=False,
                 )
             except (TypeError, ValueError) as error:
                 logging.warning(
@@ -102,7 +108,14 @@ class BaseModelHandler:
                     error,
                     self.prompt_style,
                 )
-        return generate_prompt(context, query, prompt_style=self.prompt_style)
+        return PreparedPrompt(
+            generate_prompt(context, query, prompt_style=self.prompt_style),
+            add_special_tokens=self.prompt_style in {"plain", "mistral"},
+        )
+
+    def format_prompt(self, query, context, template=None):
+        """Return prompt text for callers that do not need tokenizer flags."""
+        return self.prepare_prompt(query, context, template).text
 
     def generate_response(
         self,
@@ -111,6 +124,7 @@ class BaseModelHandler:
         temperature=0.4,
         top_k=50,
         top_p=0.93,
+        add_special_tokens=True,
     ):
         """Generate a response from the model given a prompt."""
         try:
@@ -120,6 +134,7 @@ class BaseModelHandler:
                 padding=True,
                 truncation=True,
                 max_length=MAX_PROMPT_TOKENS,
+                add_special_tokens=add_special_tokens,
             )
             device = "cuda" if torch.cuda.is_available() else "cpu"
             inputs = {key: value.to(device) for key, value in inputs.items()}

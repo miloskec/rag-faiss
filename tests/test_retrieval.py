@@ -94,6 +94,21 @@ def test_context_has_source_headers_and_respects_character_budget():
     assert context.startswith("[Source: aster-100.md; chunk:")
 
 
+def test_context_limit_includes_truncation_marker():
+    results = [
+        {
+            "source": "long.md",
+            "chunk_id": "long.md::0000",
+            "context_text": "A" * 2000,
+        }
+    ]
+
+    context = searcher.assemble_context(results, max_chars=90)
+
+    assert len(context) <= 90
+    assert context.endswith(" [...]")
+
+
 def test_rag_v0_and_rag_v1_share_pipeline_but_use_different_order():
     _install_candidates()
     embedder = FakeEmbedder([[1.0, 0.0]])

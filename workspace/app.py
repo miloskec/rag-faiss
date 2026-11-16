@@ -35,17 +35,11 @@ def create_app():
         index_type = (request.args.get("type") or "pdf").strip().lower()
         try:
             if index_type in {"doc", "docx", "odt"}:
-                doc_indexer.clear_index()
-                count = doc_indexer.update_doc_index(FEED_DIR / "doc")
-                doc_indexer.save_index_and_mappings()
+                count = doc_indexer.rebuild_doc_index(FEED_DIR / "doc")
             elif index_type == "synthetic":
-                pdf_indexer.clear_index()
-                count = pdf_indexer.update_text_index(SYNTHETIC_CORPUS_DIR)
-                pdf_indexer.save_index_and_mappings()
+                count = pdf_indexer.rebuild_text_index(SYNTHETIC_CORPUS_DIR)
             elif index_type == "pdf":
-                pdf_indexer.clear_index()
-                count = pdf_indexer.update_pdf_index(FEED_DIR / "pdf")
-                pdf_indexer.save_index_and_mappings()
+                count = pdf_indexer.rebuild_pdf_index(FEED_DIR / "pdf")
             else:
                 return jsonify({"error": "type must be pdf, doc, or synthetic"}), 400
         except IndexCompatibilityError as error:

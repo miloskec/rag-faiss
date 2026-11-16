@@ -1,6 +1,7 @@
 import torch
 
 from base_model_handler import BaseModelHandler
+from model_utils import query_model
 from rag_config import MAX_PROMPT_TOKENS
 
 
@@ -44,24 +45,26 @@ def test_chat_template_is_preferred_when_available():
     handler = BaseModelHandler("fake", "/tmp/fake")
     handler.tokenizer = RecordingTokenizer()
 
-    prompt = handler.format_prompt(
+    prepared = handler.prepare_prompt(
         "Which firmware is required?",
         "Aster-100 requires firmware 2.4.0.",
     )
 
-    assert prompt.startswith("SYSTEM=")
-    assert "Question: Which firmware is required?" in prompt
-    assert "2.4.0" in prompt
+    assert prepared.text.startswith("SYSTEM=")
+    assert "Question: Which firmware is required?" in prepared.text
+    assert "2.4.0" in prepared.text
+    assert prepared.add_special_tokens is False
 
 
 def test_broken_chat_template_uses_fallback_prompt():
     handler = BaseModelHandler("fake", "/tmp/fake", prompt_style="mistral")
     handler.tokenizer = BrokenTemplateTokenizer()
 
-    prompt = handler.format_prompt("question", "context")
+    prepared = handler.prepare_prompt("question", "context")
 
-    assert prompt.startswith("[INST]")
-    assert "Question: question" in prompt
+    assert prepared.text.startswith("[INST]")
+    assert "Question: question" in prepared.text
+    assert prepared.add_special_tokens is True
 
 
 def test_generation_uses_configured_prompt_token_limit():
@@ -74,3 +77,13 @@ def test_generation_uses_configured_prompt_token_limit():
 
     assert handler.tokenizer.last_call["max_length"] == MAX_PROMPT_TOKENS
     assert handler.tokenizer.last_call["truncation"] is True
+
+
+def test_query_model_disables_special_tokens_for_chat_template():
+    handler = BaseModelHandler("fake", "/tmp/fake")
+    handler.tokenizer = RecordingTokenizer()
+    handler.model = EchoModel()
+
+    query_model(handler, "question", "context")
+
+    assert handler.tokenizer.last_call["add_special_tokens"] is False
