@@ -108,6 +108,9 @@ actually verified.
 | P1-13 | Formatted chat templates could receive duplicate special tokens | A `tokenize=False` template was tokenized again with default special-token insertion | Prepared prompts carry an explicit tokenizer policy; chat-template prompts use `add_special_tokens=False` |
 | P1-14 | A failed index rebuild cleared the active in-memory index | `/update-index` cleared shared state before ingestion completed | Rebuilds use an isolated FAISS/mapping pair and replace shared state only after persistence succeeds |
 | P1-15 | Historical feed documents were included in the Docker build | `COPY workspace` included the Ustav PDF despite unresolved rights | `workspace/feed/` and archived artifacts are excluded from Docker build context |
+| P1-16 | Hugging Face authentication names were inconsistent | Compose translated a non-canonical name while local Python did not pass it explicitly | The project now uses only `HF_TOKEN`, loads `.env` before Transformers, and passes the token to model loading |
+| P1-17 | Relative log paths depended on the process working directory | `workspace/logs` resolved from wherever the process started | Relative log paths resolve from the project root |
+| P1-18 | The default reader path required gated Llama access | The default model was `meta-llama/Llama-2-7b-chat-hf` | The default is now public Apache-2.0 `mistral-7b-instruct`; Llama remains optional |
 
 ### Partial or unresolved
 
@@ -179,7 +182,7 @@ The following checks were executed in the repository's isolated `.venv`:
 
 | Check | Result |
 | --- | --- |
-| `.venv/bin/python -m pytest -q` | **45 passed** |
+| `.venv/bin/python -m pytest -q` | **54 passed** |
 | Python compile check with isolated bytecode directory | **passed** |
 | Ruff static check for `workspace/` and `tests/` | **passed** |
 | `git diff --check` | **passed** |
@@ -189,7 +192,7 @@ The following checks were executed in the repository's isolated `.venv`:
 | `docker compose build` | **passed**; image `rag-faiss:book-ready` |
 | Container dependency imports | **passed** |
 | Container `python3 -m pip check` | **No broken requirements found** |
-| Container pytest suite | **45 passed** |
+| Container pytest suite | **54 passed** |
 | `docker compose` startup and `/health` request | **200 OK**; debug off |
 | Local Flask startup and `/health` request | **200 OK**; logging fallback tested |
 | Synthetic resolver | **9 chunks from 3 Markdown files** |

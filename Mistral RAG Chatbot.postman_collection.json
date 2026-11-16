@@ -51,7 +51,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"query\": \"Which firmware version does Aster-100 require for calibration?\",\n  \"context_type\": \"synthetic\",\n  \"mode\": \"rag_v0\",\n  \"top_k\": 5,\n  \"model\": \"llama-7b-hf\"\n}",
+          "raw": "{\n  \"query\": \"Which firmware version does Aster-100 require for calibration?\",\n  \"context_type\": \"synthetic\",\n  \"mode\": \"rag_v0\",\n  \"top_k\": 5,\n  \"model\": \"mistral-7b-instruct\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -73,7 +73,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"query\": \"Which firmware version does Aster-100 require for calibration?\",\n  \"context_type\": \"synthetic\",\n  \"mode\": \"rag_v1\",\n  \"top_k\": 5,\n  \"model\": \"llama-7b-hf\"\n}",
+          "raw": "{\n  \"query\": \"Which firmware version does Aster-100 require for calibration?\",\n  \"context_type\": \"synthetic\",\n  \"mode\": \"rag_v1\",\n  \"top_k\": 5,\n  \"model\": \"mistral-7b-instruct\"\n}",
           "options": {
             "raw": {
               "language": "json"

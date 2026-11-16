@@ -1,9 +1,11 @@
 import os
+import logging
+
+from rag_config import MAX_NEW_TOKENS, MAX_PROMPT_TOKENS, env_flag, get_hf_token
+
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-import logging
 from prompting import PreparedPrompt, build_chat_messages, generate_prompt
-from rag_config import MAX_NEW_TOKENS, MAX_PROMPT_TOKENS, env_flag
 
 class BaseModelHandler:
     def __init__(self, model_name, save_dir, prompt_style="plain"):
@@ -39,14 +41,18 @@ class BaseModelHandler:
             if not self.is_model_saved():
                 print(f"Model {self.model_name} not found locally. Downloading from Hugging Face...")
                 local_only = env_flag("MODEL_LOCAL_FILES_ONLY", default=False)
+                token = get_hf_token()
                 dtype = torch.float16 if torch.cuda.is_available() else torch.float32
                 self.tokenizer = AutoTokenizer.from_pretrained(
-                    self.model_name, local_files_only=local_only
+                    self.model_name,
+                    local_files_only=local_only,
+                    token=token,
                 )
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
                     torch_dtype=dtype,
                     local_files_only=local_only,
+                    token=token,
                 )
                 
                 # Add a padding token if it does not exist

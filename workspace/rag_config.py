@@ -7,10 +7,34 @@ from dotenv import load_dotenv
 WORKSPACE_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = WORKSPACE_DIR.parent
 load_dotenv(PROJECT_DIR / ".env")
+
+
+def resolve_project_path(value, default):
+    path = Path(value) if value else Path(default)
+    if not path.is_absolute():
+        path = PROJECT_DIR / path
+    return path.resolve()
+
+
+def get_hf_token():
+    token = (os.getenv("HF_TOKEN") or "").strip()
+    if token.startswith("<") and token.endswith(">"):
+        return None
+    return token or None
+
+
+def discard_placeholder_hf_token():
+    if os.getenv("HF_TOKEN") and get_hf_token() is None:
+        os.environ.pop("HF_TOKEN", None)
+
+
+discard_placeholder_hf_token()
+
+
 DATA_DIR = WORKSPACE_DIR / "data"
 FEED_DIR = WORKSPACE_DIR / "feed"
 SYNTHETIC_CORPUS_DIR = WORKSPACE_DIR / "examples" / "synthetic_corpus"
-LOG_DIR = Path(os.getenv("RAG_LOG_DIR", WORKSPACE_DIR / "logs"))
+LOG_DIR = resolve_project_path(os.getenv("RAG_LOG_DIR"), WORKSPACE_DIR / "logs")
 
 EMBEDDING_MODEL_NAME = os.getenv(
     "EMBEDDING_MODEL_NAME", "intfloat/multilingual-e5-large"
@@ -27,7 +51,7 @@ MAX_PROMPT_TOKENS = int(os.getenv("RAG_MAX_PROMPT_TOKENS", "2048"))
 MAX_NEW_TOKENS = int(os.getenv("RAG_MAX_NEW_TOKENS", "512"))
 DEFAULT_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 DEFAULT_RAG_MODE = os.getenv("RAG_MODE", "rag_v0").strip().lower()
-DEFAULT_MODEL = os.getenv("MODEL", "llama-7b-hf").strip()
+DEFAULT_MODEL = os.getenv("MODEL", "mistral-7b-instruct").strip()
 
 
 def env_flag(name, default=False):

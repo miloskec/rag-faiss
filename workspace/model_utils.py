@@ -2,13 +2,14 @@ import gc
 import logging
 import threading
 
+from rag_config import DEFAULT_MODEL
+
 import torch
 
 from llama_module import LlamaModelHandler
 from mistral_module import MistralModelHandler
 from prompting import generate_prompt
 from qwen_module import QwenModelHandler
-from rag_config import DEFAULT_MODEL
 from sambalingo_module import SambalingoModelHandler
 
 

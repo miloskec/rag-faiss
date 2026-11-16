@@ -23,13 +23,13 @@ services:
       - ./sambalingo-chat:/models/saved_samba_model
       - ./model-cache:/models/huggingface_cache
     environment:
-      MODEL: ${MODEL:-llama-7b-hf}
+      MODEL: ${MODEL:-mistral-7b-instruct}
       RAG_MODE: ${RAG_MODE:-rag_v0}
       HOST: 0.0.0.0
       PORT: 5000
       FLASK_DEBUG: "false"
       NVIDIA_VISIBLE_DEVICES: all
-      HUGGING_FACE_HUB_TOKEN: ${HUGGINGFACE_TOKEN:-}
+      HF_TOKEN: ${HF_TOKEN:-}
       HF_HOME: /models/huggingface_cache
       RAG_LOG_DIR: /tmp/rag-logs
     stdin_open: true

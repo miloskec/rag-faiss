@@ -2,7 +2,6 @@ import logging
 import os
 from datetime import datetime
 
-from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 
 import doc_indexer
@@ -18,10 +17,6 @@ from rag_config import (
     env_flag,
     normalize_rag_mode,
 )
-
-
-load_dotenv()
-
 
 def create_app():
     app = Flask(__name__)

@@ -1,5 +1,6 @@
 import torch
 
+import base_model_handler
 from base_model_handler import BaseModelHandler
 from model_utils import query_model
 from rag_config import MAX_PROMPT_TOKENS
@@ -32,6 +33,27 @@ class RecordingTokenizer:
 class EchoModel:
     def generate(self, input_ids, **kwargs):
         return input_ids
+
+
+class SavingTokenizer(RecordingTokenizer):
+    def __init__(self, calls):
+        self.calls = calls
+        self.pad_token = None
+        self.eos_token = "</s>"
+
+    def save_pretrained(self, path):
+        self.calls.append(("tokenizer_save", path))
+
+
+class SavingModel:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def to(self, device):
+        return self
+
+    def save_pretrained(self, path):
+        self.calls.append(("model_save", path))
 
 
 class BrokenTemplateTokenizer:
@@ -87,3 +109,34 @@ def test_query_model_disables_special_tokens_for_chat_template():
     query_model(handler, "question", "context")
 
     assert handler.tokenizer.last_call["add_special_tokens"] is False
+
+
+def test_model_loading_passes_hf_token_explicitly(tmp_path, monkeypatch):
+    calls = []
+    tokenizer = SavingTokenizer(calls)
+    model = SavingModel(calls)
+
+    class TokenizerLoader:
+        @staticmethod
+        def from_pretrained(*args, **kwargs):
+            calls.append(("tokenizer", kwargs))
+            return tokenizer
+
+    class ModelLoader:
+        @staticmethod
+        def from_pretrained(*args, **kwargs):
+            calls.append(("model", kwargs))
+            return model
+
+    monkeypatch.setenv("HF_TOKEN", "test-token")
+    monkeypatch.setattr(base_model_handler, "AutoTokenizer", TokenizerLoader)
+    monkeypatch.setattr(base_model_handler, "AutoModelForCausalLM", ModelLoader)
+    monkeypatch.setattr(base_model_handler.torch.cuda, "is_available", lambda: False)
+    handler = BaseModelHandler("example/model", tmp_path)
+
+    handler.initialize_model()
+
+    tokenizer_call = next(call for call in calls if call[0] == "tokenizer")[1]
+    model_call = next(call for call in calls if call[0] == "model")[1]
+    assert tokenizer_call["token"] == "test-token"
+    assert model_call["token"] == "test-token"
