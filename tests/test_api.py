@@ -30,6 +30,18 @@ def test_search_rejects_invalid_mode():
     assert response.status_code == 400
 
 
+def test_search_rejects_legacy_model_even_without_context():
+    client = app_module.app.test_client()
+
+    response = client.post(
+        "/search",
+        json={"query": "test", "model": "mistral-7b-instruct"},
+    )
+
+    assert response.status_code == 400
+    assert "Unsupported model" in response.get_json()["error"]
+
+
 def test_search_returns_pipeline_result(monkeypatch):
     expected = {
         "mode": "rag_v0",
@@ -89,7 +101,6 @@ def test_synthetic_api_flow_uses_retrieval_and_generation_double(
             "query": "Which firmware version does Aster-100 require?",
             "context_type": "synthetic",
             "mode": "v0",
-            "model": "fake-model",
         },
     )
 

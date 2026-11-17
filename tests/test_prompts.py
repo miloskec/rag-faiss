@@ -1,29 +1,20 @@
 import pytest
 
-from model_utils import generate_prompt
+from prompting import build_chat_messages, generate_prompt
 
 
-@pytest.mark.parametrize(
-    ("style", "opening"),
-    [
-        ("llama2", "<s>[INST]"),
-        ("mistral", "[INST]"),
-        ("chatml", "<|im_start|>system"),
-        ("sambalingo", "<|system|>"),
-        ("plain", "Answer the question"),
-    ],
-)
-def test_supported_prompt_styles_preserve_question(style, opening):
-    prompt = generate_prompt(
-        "Aster-100 requires firmware 2.4.0.",
+def test_native_chat_messages_preserve_question_and_context():
+    messages = build_chat_messages(
         "Which firmware is required?",
-        prompt_style=style,
+        "Aster-100 requires firmware 2.4.0.",
     )
+    user_content = messages[1]["content"]
 
-    assert prompt.startswith(opening)
-    assert "Question: Which firmware is required?" in prompt
-    assert "2.4.0" in prompt
-    assert prompt.index("Question:") < prompt.index("Context:")
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert "Question: Which firmware is required?" in user_content
+    assert "2.4.0" in user_content
+    assert user_content.index("Question:") < user_content.index("Context:")
 
 
 def test_custom_template_receives_context_and_query():
@@ -34,6 +25,14 @@ def test_custom_template_receives_context_and_query():
     )
 
     assert prompt == "Q=query text\nC=context text"
+
+
+def test_default_prompt_is_grounded_user_content():
+    prompt = generate_prompt("context text", "query text")
+
+    assert prompt.startswith("Answer the question using only the supplied context.")
+    assert "Question: query text" in prompt
+    assert prompt.index("Question:") < prompt.index("Context:")
 
 
 def test_unknown_template_placeholder_fails():

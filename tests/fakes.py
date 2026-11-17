@@ -8,7 +8,13 @@ class FakeEmbedder:
         self.vectors = vectors
         self.inputs = []
 
-    def encode(self, texts, normalize_embeddings=True, convert_to_numpy=True):
+    def encode(
+        self,
+        texts,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=False,
+    ):
         self.inputs.extend(texts)
         if self.vectors is not None:
             return np.asarray(self.vectors, dtype=np.float32)
@@ -19,7 +25,13 @@ class HashEmbedder:
     def __init__(self, dimension=64):
         self.dimension = dimension
 
-    def encode(self, texts, normalize_embeddings=True, convert_to_numpy=True):
+    def encode(
+        self,
+        texts,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=False,
+    ):
         vectors = []
         for text in texts:
             vector = np.zeros(self.dimension, dtype=np.float32)
@@ -39,7 +51,7 @@ class FakeReranker:
         self.scores = scores
         self.pairs = None
 
-    def predict(self, pairs):
+    def predict(self, pairs, show_progress_bar=False):
         self.pairs = pairs
         return self.scores
 

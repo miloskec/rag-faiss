@@ -1,12 +1,21 @@
+import logging
+import time
+
 import numpy as np
 
 import shared_state
 from index_utils import IndexCompatibilityError, display_text
-from model_utils import get_model_handler, query_model, unload_current_model
+from model_utils import (
+    get_model_handler,
+    query_model,
+    resolve_model_selection,
+    unload_current_model,
+)
 from rag_config import (
     DEFAULT_TOP_K,
     EMBEDDING_MODEL_NAME,
     MAX_CONTEXT_CHARS,
+    RERANKER_DEVICE,
     RERANKER_MODEL_NAME,
     normalize_rag_mode,
 )
@@ -30,7 +39,7 @@ def get_reranker():
     if _reranker_model is None:
         from sentence_transformers import CrossEncoder
 
-        _reranker_model = CrossEncoder(RERANKER_MODEL_NAME)
+        _reranker_model = CrossEncoder(RERANKER_MODEL_NAME, device=RERANKER_DEVICE)
     return _reranker_model
 
 
@@ -44,6 +53,7 @@ def encode_query(query, embedder=None):
         [f"query: {query}"],
         normalize_embeddings=True,
         convert_to_numpy=True,
+        show_progress_bar=False,
     )
     vector = np.asarray(vector, dtype=np.float32)
     if vector.ndim == 1:
@@ -77,6 +87,7 @@ def retrieve_candidates(
     context_type="pdf",
     top_k=DEFAULT_TOP_K,
     embedder=None,
+    timings=None,
 ):
     query = (query or "").strip()
     if not query:
@@ -92,13 +103,23 @@ def retrieve_candidates(
             f"FAISS has {index.ntotal} vectors but mapping has {len(mappings)} entries"
         )
 
+    embedding_started = time.perf_counter()
     query_vector = encode_query(query, embedder)
+    if timings is not None:
+        timings["query_embedding_ms"] = round(
+            (time.perf_counter() - embedding_started) * 1000, 2
+        )
     if query_vector.shape[1] != index.d:
         raise IndexCompatibilityError(
             f"Query embedding dimension is {query_vector.shape[1]}, index expects {index.d}"
         )
 
+    search_started = time.perf_counter()
     distances, indices = index.search(query_vector, top_k)
+    if timings is not None:
+        timings["vector_search_ms"] = round(
+            (time.perf_counter() - search_started) * 1000, 2
+        )
     candidates = []
     for vector_rank, (distance, mapped_index) in enumerate(
         zip(distances[0], indices[0]), start=1
@@ -121,7 +142,9 @@ def rerank_candidates(query, candidates, reranker=None):
     model = reranker or get_reranker()
     # Cross-encoders consume explicit (query, passage) pairs.
     pairs = [[query, candidate["context_text"]] for candidate in candidates]
-    scores = np.asarray(model.predict(pairs), dtype=float).reshape(-1)
+    scores = np.asarray(
+        model.predict(pairs, show_progress_bar=False), dtype=float
+    ).reshape(-1)
     if len(scores) != len(candidates):
         raise ValueError("Reranker returned a different number of scores than candidates")
 
@@ -182,9 +205,27 @@ def search_index(
     model_handler=None,
     max_context_chars=MAX_CONTEXT_CHARS,
 ):
+    request_started = time.perf_counter()
+    metrics = {
+        "query_embedding_ms": 0.0,
+        "vector_search_ms": 0.0,
+        "rerank_ms": 0.0,
+        "context_assembly_ms": 0.0,
+        "llm_total_ms": 0.0,
+    }
+    resolve_model_selection(aimodel)
     mode = normalize_rag_mode(mode)
-    candidates = retrieve_candidates(query, context_type, top_k, embedder)
+    candidates = retrieve_candidates(
+        query,
+        context_type,
+        top_k,
+        embedder,
+        timings=metrics,
+    )
     if not candidates:
+        metrics["total_request_ms"] = round(
+            (time.perf_counter() - request_started) * 1000, 2
+        )
         return {
             "mode": mode,
             "status": "no_context",
@@ -192,10 +233,16 @@ def search_index(
             "retrieval_results": [],
             "search_results": [],
             "model_response": None,
+            "metrics": metrics,
+            "model_runtime": None,
         }
 
     if mode == "rag_v1":
+        rerank_started = time.perf_counter()
         ordered_results = rerank_candidates(query, candidates, reranker)
+        metrics["rerank_ms"] = round(
+            (time.perf_counter() - rerank_started) * 1000, 2
+        )
     else:
         ordered_results = []
         for rank, candidate in enumerate(candidates, start=1):
@@ -203,14 +250,38 @@ def search_index(
             item["rank"] = rank
             ordered_results.append(item)
 
+    context_started = time.perf_counter()
     context = assemble_context(ordered_results, max_context_chars)
+    metrics["context_assembly_ms"] = round(
+        (time.perf_counter() - context_started) * 1000, 2
+    )
     handler = model_handler or get_model_handler(aimodel)
-    response = query_model(handler, query, context, template)
+    llm_started = time.perf_counter()
+    generation = query_model(handler, query, context, template)
+    metrics["llm_total_ms"] = round(
+        (time.perf_counter() - llm_started) * 1000, 2
+    )
+    metrics.update(generation.metrics)
+    metrics["total_request_ms"] = round(
+        (time.perf_counter() - request_started) * 1000, 2
+    )
+    logging.info(
+        "RAG mode=%s total=%.2fms llm=%.2fms generated=%s tokens=%.2f/s",
+        mode,
+        metrics["total_request_ms"],
+        metrics["llm_total_ms"],
+        metrics.get("generated_tokens"),
+        metrics.get("generation_tokens_per_second"),
+    )
     return {
         "mode": mode,
         "status": "ok",
         "context": context,
         "retrieval_results": candidates,
         "search_results": ordered_results,
-        "model_response": response,
+        "model_response": generation.text,
+        "metrics": metrics,
+        "model_runtime": (
+            handler.runtime_info() if hasattr(handler, "runtime_info") else None
+        ),
     }

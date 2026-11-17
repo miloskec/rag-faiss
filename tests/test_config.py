@@ -63,9 +63,9 @@ def test_hugging_face_config_loads_before_transformers_import():
     assert source.index("from rag_config") < source.index("from transformers")
 
 
-def test_default_model_is_public_mistral():
+def test_default_model_is_prequantized_public_qwen():
     source = (PROJECT_ROOT / "workspace" / "rag_config.py").read_text(
         encoding="utf-8"
     )
 
-    assert 'os.getenv("MODEL", "mistral-7b-instruct")' in source
+    assert '"MODEL_ID", "unsloth/Qwen3-4B-Instruct-2507-bnb-4bit"' in source

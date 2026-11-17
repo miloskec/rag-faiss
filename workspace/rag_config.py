@@ -43,15 +43,18 @@ EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "1024"))
 RERANKER_MODEL_NAME = os.getenv(
     "RERANKER_MODEL_NAME", "cross-encoder/ms-marco-MiniLM-L-6-v2"
 )
+RERANKER_DEVICE = os.getenv("RERANKER_DEVICE", "cpu").strip()
 
 CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "1200"))
 CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "150"))
 MAX_CONTEXT_CHARS = int(os.getenv("RAG_MAX_CONTEXT_CHARS", "6000"))
 MAX_PROMPT_TOKENS = int(os.getenv("RAG_MAX_PROMPT_TOKENS", "2048"))
-MAX_NEW_TOKENS = int(os.getenv("RAG_MAX_NEW_TOKENS", "512"))
+MAX_NEW_TOKENS = int(os.getenv("RAG_MAX_NEW_TOKENS", "128"))
 DEFAULT_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 DEFAULT_RAG_MODE = os.getenv("RAG_MODE", "rag_v0").strip().lower()
-DEFAULT_MODEL = os.getenv("MODEL", "mistral-7b-instruct").strip()
+MODEL_ID = os.getenv(
+    "MODEL_ID", "unsloth/Qwen3-4B-Instruct-2507-bnb-4bit"
+).strip()
 
 
 def env_flag(name, default=False):

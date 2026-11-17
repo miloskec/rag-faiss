@@ -33,7 +33,7 @@ def test_synthetic_corpus_indexes_and_retrieves_source_aligned_candidate():
     assert candidates[0]["source"] == "aster-100.md"
     assert "2.4.0" in candidates[0]["context_text"]
     result = searcher.search_index(
-        "fake-model",
+        None,
         "Which firmware version does Aster-100 require for calibration?",
         context_type="synthetic",
         mode="rag_v0",

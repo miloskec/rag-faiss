@@ -18,7 +18,8 @@ The basic path is deliberately visible and non-magical:
 7. **Context:** retain candidates in FAISS order for RAG v0, add source headers,
    and enforce a context budget.
 8. **Generation:** place the question before the context in a grounded model
-   prompt and generate an answer.
+   prompt, tokenize the tokenizer's native Qwen chat template, and generate a
+   concise answer with the prequantized NF4 model.
 
 Index publication is intentionally separate from indexing: the pipeline first
 builds a complete FAISS/mapping generation and only then switches the active

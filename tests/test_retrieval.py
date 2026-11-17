@@ -116,7 +116,7 @@ def test_rag_v0_and_rag_v1_share_pipeline_but_use_different_order():
     handler = CapturingModelHandler()
 
     v0 = searcher.search_index(
-        "fake-model",
+        None,
         "Which firmware does Aster-100 require?",
         context_type="pdf",
         top_k=3,
@@ -126,7 +126,7 @@ def test_rag_v0_and_rag_v1_share_pipeline_but_use_different_order():
         model_handler=handler,
     )
     v1 = searcher.search_index(
-        "fake-model",
+        None,
         "Which firmware does Aster-100 require?",
         context_type="pdf",
         top_k=3,
@@ -149,7 +149,7 @@ def test_no_context_skips_generation():
     handler = CapturingModelHandler()
 
     result = searcher.search_index(
-        "fake-model",
+        None,
         "No matching context",
         embedder=FakeEmbedder([[1.0, 0.0]]),
         model_handler=handler,
@@ -161,5 +161,5 @@ def test_no_context_skips_generation():
 
 
 def test_invalid_model_selection_raises_value_error():
-    with pytest.raises(ValueError, match="Unknown model selection"):
+    with pytest.raises(ValueError, match="Unsupported model"):
         model_utils.get_model_handler("does-not-exist")

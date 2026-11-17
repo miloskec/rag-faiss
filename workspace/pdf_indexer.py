@@ -107,6 +107,7 @@ def _encode_passages(chunks, embedding_model=None):
         passages,
         normalize_embeddings=True,
         convert_to_numpy=True,
+        show_progress_bar=False,
     )
     vectors = np.asarray(vectors, dtype=np.float32)
     if vectors.ndim == 1:

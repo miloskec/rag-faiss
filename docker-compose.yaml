@@ -17,14 +17,13 @@ services:
       - "127.0.0.1:5000:5000"
     volumes:
       - ./workspace:/workspace
-      - ./mistral-7b-instruct:/models/saved_mistral_model
-      - ./llama-7b-hf:/models/saved_llama_model
-      - ./qwen2.5-7b-instruct:/models/saved_qwen_model
-      - ./sambalingo-chat:/models/saved_samba_model
       - ./model-cache:/models/huggingface_cache
     environment:
-      MODEL: ${MODEL:-mistral-7b-instruct}
+      MODEL_ID: ${MODEL_ID:-unsloth/Qwen3-4B-Instruct-2507-bnb-4bit}
+      MODEL_LOCAL_FILES_ONLY: ${MODEL_LOCAL_FILES_ONLY:-false}
       RAG_MODE: ${RAG_MODE:-rag_v0}
+      RAG_MAX_NEW_TOKENS: ${RAG_MAX_NEW_TOKENS:-128}
+      RERANKER_DEVICE: ${RERANKER_DEVICE:-cpu}
       HOST: 0.0.0.0
       PORT: 5000
       FLASK_DEBUG: "false"

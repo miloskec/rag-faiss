@@ -11,8 +11,9 @@ workspace/data/**/index.faiss
 workspace/data/**/text_mapping.json
 workspace/data/**/active_generation.json
 workspace/data/**/generations/
+model-cache/
+.e2e-runtime-*/
 mistral-7b-instruct/
 llama-7b-hf/
 qwen2.5-7b-instruct/
 sambalingo-chat/
-model-cache/

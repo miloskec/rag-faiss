@@ -98,7 +98,7 @@ actually verified.
 | P1-3 | Index persistence allowed partial or mismatched state | Pickle mapping, no dimension check, no mapping-count check | Each pair is written into a complete generation directory; one atomically replaced manifest publishes the active pair |
 | P1-4 | Relative paths depended on container working directory | Paths used `./workspace/...` | Runtime paths are anchored to the module directory |
 | P1-5 | E5 retrieval prefixes were absent | Embeddings encoded raw text | Passages use `passage:` and queries use `query:`; vectors are normalized |
-| P1-6 | Qwen and SambaLingo choices were base models | The prior commit selected `Qwen2.5-7B` and `SambaLingo-Serbian-Base` | Defaults now use `Qwen2.5-7B-Instruct` and `SambaLingo-Serbian-Chat` |
+| P1-6 | The active registry mixed several base and instruction models | Multiple FP16 handlers and cache directories were active | Replaced by one prequantized Qwen 3 4B answer path; historical handler files are no longer imported |
 | P1-7 | README differed materially from runtime behavior | It still described PCI-DSS content and old model/API behavior | README now documents the synthetic corpus, modes, configuration, models, API, Docker, and limitations |
 | P1-8 | Tests were absent | No test suite or test dependency existed | Added focused pytest coverage and deterministic fakes |
 | P1-9 | API input errors were inconsistently validated | Non-object JSON, non-string context types, invalid top-K, and malformed templates could reach deeper code | Request types and ranges are validated before retrieval/model work |
@@ -110,7 +110,10 @@ actually verified.
 | P1-15 | Historical feed documents were included in the Docker build | `COPY workspace` included the Ustav PDF despite unresolved rights | `workspace/feed/` and archived artifacts are excluded from Docker build context |
 | P1-16 | Hugging Face authentication names were inconsistent | Compose translated a non-canonical name while local Python did not pass it explicitly | The project now uses only `HF_TOKEN`, loads `.env` before Transformers, and passes the token to model loading |
 | P1-17 | Relative log paths depended on the process working directory | `workspace/logs` resolved from wherever the process started | Relative log paths resolve from the project root |
-| P1-18 | The default reader path required gated Llama access | The default model was `meta-llama/Llama-2-7b-chat-hf` | The default is now public Apache-2.0 `mistral-7b-instruct`; Llama remains optional |
+| P1-18 | The default reader path required gated Llama access | The default model was `meta-llama/Llama-2-7b-chat-hf` | The default is now public Apache-2.0 `unsloth/Qwen3-4B-Instruct-2507-bnb-4bit` |
+| P1-19 | The FP16 answer path was too slow for an introductory demo | Historical short requests took roughly 129 seconds | The active answer model is a 2.66 GB prequantized NF4 model with BF16 compute |
+| P1-20 | A model name alone could not prove 4-bit execution | The old loader used normal FP16 causal model weights | Runtime rejects loading unless bitsandbytes 4-bit modules and NF4 state are detected |
+| P1-21 | Request latency lacked stage-level diagnostics | Only end-to-end timing was observable | Responses now expose embedding, FAISS, rerank, prompt, load, generation, token throughput, and GPU-memory metrics |
 
 ### Partial or unresolved
 
@@ -158,7 +161,7 @@ actually verified.
 - Placed the question before context in prompt text.
 - Added tokenizer prompt limits and preserved the question under truncation.
 - Preferred tokenizer-provided chat templates.
-- Added Llama 2, Mistral, ChatML, SambaLingo, and plain fallback formats.
+- Added native tokenizer chat-template input with Qwen ChatML markup.
 - Added explicit model error propagation instead of dictionary errors.
 - Added valid local-model detection for both `tokenizer.json` and
   `tokenizer.model`.
@@ -182,7 +185,7 @@ The following checks were executed in the repository's isolated `.venv`:
 
 | Check | Result |
 | --- | --- |
-| `.venv/bin/python -m pytest -q` | **54 passed** |
+| `.venv/bin/python -m pytest -q` | **51 passed** |
 | Python compile check with isolated bytecode directory | **passed** |
 | Ruff static check for `workspace/` and `tests/` | **passed** |
 | `git diff --check` | **passed** |
@@ -192,7 +195,7 @@ The following checks were executed in the repository's isolated `.venv`:
 | `docker compose build` | **passed**; image `rag-faiss:book-ready` |
 | Container dependency imports | **passed** |
 | Container `python3 -m pip check` | **No broken requirements found** |
-| Container pytest suite | **54 passed** |
+| Container pytest suite | **51 passed** |
 | `docker compose` startup and `/health` request | **200 OK**; debug off |
 | Local Flask startup and `/health` request | **200 OK**; logging fallback tested |
 | Synthetic resolver | **9 chunks from 3 Markdown files** |
@@ -206,6 +209,12 @@ The following checks were executed in the repository's isolated `.venv`:
 | Failed generation publication | previous manifest and active FAISS/mapping pair remained loadable |
 | Failed index rebuild | active in-memory index remained unchanged |
 | Docker build context | historical feed and archived artifacts excluded |
+| Qwen loader on RTX 4080 SUPER | actual NF4, 252 four-bit modules, BF16 compute, double quantization |
+| Qwen model load from local cache | 2.33-2.74 seconds cold |
+| RAG v0 warm requests | 1.21 s, 1.18 s, 1.20 s; 19 generated tokens |
+| RAG v1 cold/warm | 7.84 s total / 1.66 s total |
+| Warm generation throughput | 15.46-16.41 tokens/s |
+| No-evidence question | model abstained with `The answer is not available.` |
 
 The tests do not claim:
 
@@ -237,6 +246,11 @@ The tests do not claim:
 8. **Old index generations are retained.** Publication is consistent and the
    prior generation remains recoverable, but automatic retention/pruning
    policy is intentionally left to the operator.
+9. **The answer model is GPU-only.** The CUDA and genuine-4-bit checks
+   deliberately fail rather than falling back to CPU or FP16.
+10. **Real v1 acceptance used a cached alternate cross-encoder.** The default
+    MiniLM reranker was not downloaded under the one-model download limit; a
+    cached BAAI cross-encoder exercised the same real v1 pipeline.
 
 ## Final book-readiness decision
 
